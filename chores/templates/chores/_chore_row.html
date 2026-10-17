@@ -1,0 +1,16 @@
+<li class="chore">
+  <div>
+    <div class="title">{{ chore.template.title }}</div>
+    <div class="done-when">Done when: {{ chore.template.done_when }}</div>
+    <div class="meta">
+      {% if chore.template.area %}{{ chore.template.area }} · {% endif %}~{{ chore.template.estimated_minutes }} min
+      · due {{ chore.due_date|date:"D j M" }}
+      · {% if chore.assignee %}{{ chore.assignee.get_username }}{% else %}unassigned{% endif %}
+    </div>
+  </div>
+  <form method="post" action="{% url 'chores:mark_done' chore.pk %}?who={{ who }}"
+        hx-post="{% url 'chores:mark_done' chore.pk %}?who={{ who }}" hx-target="#chore-lists">
+    {% csrf_token %}
+    <button type="submit" class="done-btn">Done</button>
+  </form>
+</li>

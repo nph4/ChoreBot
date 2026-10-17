@@ -1,0 +1,14 @@
+{% extends "chores/base.html" %}
+
+{% block title %}Today · ChoreBot{% endblock %}
+
+{% block content %}
+  <p class="filter">
+    Show:
+    <a href="?who=everyone"{% if who == "everyone" %} class="current"{% endif %}>Everyone</a>
+    <a href="?who=mine"{% if who == "mine" %} class="current"{% endif %}>Mine</a>
+  </p>
+  <div id="chore-lists">
+    {% include "chores/_chore_lists.html" %}
+  </div>
+{% endblock %}

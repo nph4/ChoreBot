@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ChoreBot{% endblock %}</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  <style>
+    :root { --bg: #fafaf7; --fg: #1d1d1b; --muted: #6b6b66; --card: #fff; --line: #e4e4de; --accent: #2f6f4f; --late: #b3412b; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #161615; --fg: #ececea; --muted: #9a9a94; --card: #1f1f1d; --line: #33332f; --accent: #6fbf94; --late: #e07a62; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.45 system-ui, sans-serif; }
+    header, main { max-width: 44rem; margin: 0 auto; padding: 1rem; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    header h1 { font-size: 1.25rem; margin: 0; }
+    a { color: var(--accent); }
+    button { font: inherit; cursor: pointer; }
+    .link-button { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; }
+    h2 { font-size: 1rem; margin: 1.5rem 0 .5rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    h2.late { color: var(--late); }
+    ul.chores { list-style: none; margin: 0; padding: 0; }
+    .chore { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: .75rem 1rem; margin-bottom: .5rem; }
+    .chore .title { font-weight: 600; }
+    .chore .meta, .chore .done-when, .empty { color: var(--muted); font-size: .9rem; }
+    .done-btn { flex-shrink: 0; background: var(--accent); color: var(--bg); border: 0; border-radius: 6px; padding: .4rem .9rem; }
+    .filter a { margin-left: .5rem; }
+    .filter a.current { color: var(--fg); text-decoration: none; font-weight: 600; }
+    form.login p { display: flex; flex-direction: column; gap: .25rem; }
+    form.login input { font: inherit; padding: .4rem; }
+  </style>
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <header>
+    <h1><a href="{% url 'chores:dashboard' %}">ChoreBot</a></h1>
+    {% if user.is_authenticated %}
+      <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <span class="meta">{{ user.get_username }}</span>
+        <button type="submit" class="link-button">Log out</button>
+      </form>
+    {% endif %}
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
