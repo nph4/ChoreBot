@@ -66,6 +66,15 @@ def complete_chore(chore, user):
     generate_due_chores()
 
 
+def assign_chore(chore, user, include_future=False):
+    """Assign an open chore (user may be None). include_future also makes them the template's default."""
+    chore.assignee = user
+    chore.save(update_fields=['assignee'])
+    if include_future:
+        chore.template.default_assignee = user
+        chore.template.save(update_fields=['default_assignee'])
+
+
 @transaction.atomic
 def save_pickup_schedules(schedules):
     """Replace the pickup setup.

@@ -1,7 +1,15 @@
 from django import forms
+from django.contrib.auth import get_user_model
 
 YES_NO = [('yes', 'Yes'), ('no', 'No')]
 WEEKLY, EVERY_OTHER_WEEK, CUSTOM = 'weekly', 'every_other_week', 'custom'
+
+
+class AssignForm(forms.Form):
+    assignee = forms.ModelChoiceField(
+        queryset=get_user_model().objects.filter(is_active=True), required=False, empty_label='Unassigned'
+    )
+    include_future = forms.BooleanField(required=False, label='Also future ones')
 
 
 class PickupSetupForm(forms.Form):

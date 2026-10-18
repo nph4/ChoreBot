@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## UI
 
-- **Done button:** it `hx-post`s, and the view returns `chores/_chore_lists.html` to replace `#chore-lists`. Without htmx it redirects instead. htmx sends the CSRF token through `hx-headers` on `<body>`.
+- **Row actions (Done, Assign):** each `hx-post`s with `?who=` preserved, and `_lists_response()` in `views.py` returns `chores/_chore_lists.html` to replace `#chore-lists`, so the Mine/Everyone filter re-applies. Without htmx it redirects instead. `assign_chore()` changes only the chore unless `include_future`, which also sets the template's `default_assignee`. htmx sends the CSRF token through `hx-headers` on `<body>`.
 - **`/pickup/` form:** sections are shown or hidden with CSS `:has()`, with no JS. So hidden inputs must not carry `required`, which is why `ScheduleForm.use_required_attribute = False`. Inactive sections still post data. The view validates only the forms that the answers select.
 - **Theme:** the Nord colors are CSS variables under `:root[data-theme=dark|light]` in `base.html`. A script in `<head>` applies the saved choice before first paint.
 

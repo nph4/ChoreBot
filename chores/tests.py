@@ -229,3 +229,55 @@ class PickupSetupViewTests(TestCase):
         })
         setup = self.client.get(self.url).context['setup']
         self.assertEqual(setup.initial, {'same_schedule': 'no', 'has_compost': 'no'})
+
+
+class AssignTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('alex', password='pw')
+        self.other = get_user_model().objects.create_user('sam')
+        self.client.force_login(self.user)
+        self.template = make_template(every_days=7)
+        [self.chore] = generate_due_chores()
+
+    def assign(self, assignee, include_future=False, **query):
+        data = {'assignee': assignee.pk if assignee else ''}
+        if include_future:
+            data['include_future'] = 'on'
+        url = reverse('chores:assign', args=[self.chore.pk])
+        return self.client.post(url, data, query_params=query, headers={'HX-Request': 'true'})
+
+    def test_assign_just_this_occurrence(self):
+        self.assign(self.other)
+        self.chore.refresh_from_db()
+        self.template.refresh_from_db()
+        self.assertEqual(self.chore.assignee, self.other)
+        self.assertIsNone(self.template.default_assignee)
+
+        complete_chore(self.chore, self.user)
+        self.assertIsNone(Chore.objects.get(completed_at__isnull=True).assignee)
+
+    def test_assign_this_and_future_ones(self):
+        self.assign(self.other, include_future=True)
+        self.template.refresh_from_db()
+        self.assertEqual(self.template.default_assignee, self.other)
+
+        complete_chore(Chore.objects.get(pk=self.chore.pk), self.user)
+        self.assertEqual(Chore.objects.get(completed_at__isnull=True).assignee, self.other)
+
+    def test_unassign(self):
+        self.assign(self.user)
+        self.assign(None)
+        self.chore.refresh_from_db()
+        self.assertIsNone(self.chore.assignee)
+
+    def test_mine_filter_reflects_assignment(self):
+        self.assertEqual(self.assign(self.other, who='mine').context['due_today'], [])
+        self.assertEqual(self.assign(self.user, who='mine').context['due_today'], [self.chore])
+
+    def test_unknown_member_is_rejected(self):
+        url = reverse('chores:assign', args=[self.chore.pk])
+        self.assertEqual(self.client.post(url, {'assignee': '999999'}).status_code, 400)
+
+    def test_dashboard_lists_members_to_assign(self):
+        response = self.client.get(reverse('chores:dashboard'))
+        self.assertContains(response, f'<option value="{self.other.pk}">sam</option>', html=True)

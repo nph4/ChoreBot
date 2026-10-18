@@ -1,14 +1,18 @@
 from datetime import timedelta
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .forms import PickupSetupForm, ScheduleForm
+from .forms import AssignForm, PickupSetupForm, ScheduleForm
 from .models import Chore, PickupSchedule
-from .services import active_pickup_schedules, complete_chore, generate_due_chores, save_pickup_schedules
+from .services import (
+    active_pickup_schedules, assign_chore, complete_chore, generate_due_chores, save_pickup_schedules,
+)
 
 UPCOMING_DAYS = 7
 
@@ -28,7 +32,16 @@ def _list_context(request):
         'overdue': [c for c in chores if c.due_date < today],
         'due_today': [c for c in chores if c.due_date == today],
         'upcoming': [c for c in chores if c.due_date > today],
+        'members': get_user_model().objects.filter(is_active=True).order_by('username'),
     }
+
+
+def _lists_response(request):
+    """After a row action: the refreshed lists for htmx, or a redirect back to the dashboard."""
+    if request.headers.get('HX-Request'):
+        return render(request, 'chores/_chore_lists.html', _list_context(request))
+    who = 'mine' if request.GET.get('who') == 'mine' else 'everyone'
+    return redirect(f"{reverse('chores:dashboard')}?who={who}")
 
 
 @login_required
@@ -44,10 +57,18 @@ def dashboard(request):
 def mark_done(request, pk):
     chore = get_object_or_404(Chore, pk=pk)
     complete_chore(chore, request.user)
-    if request.headers.get('HX-Request'):
-        return render(request, 'chores/_chore_lists.html', _list_context(request))
-    who = 'mine' if request.GET.get('who') == 'mine' else 'everyone'
-    return redirect(f"{reverse('chores:dashboard')}?who={who}")
+    return _lists_response(request)
+
+
+@login_required
+@require_POST
+def assign(request, pk):
+    chore = get_object_or_404(Chore, pk=pk, completed_at__isnull=True)
+    form = AssignForm(request.POST)
+    if not form.is_valid():
+        return HttpResponseBadRequest('Unknown household member.')
+    assign_chore(chore, form.cleaned_data['assignee'], include_future=form.cleaned_data['include_future'])
+    return _lists_response(request)
 
 
 @login_required

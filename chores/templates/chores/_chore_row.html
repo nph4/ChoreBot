@@ -7,6 +7,22 @@
       · due {{ chore.due_date|date:"D j M" }}
       · {% if chore.assignee %}{{ chore.assignee.get_username }}{% else %}unassigned{% endif %}
     </div>
+    <details class="assign">
+      <summary>Assign</summary>
+      <form method="post" action="{% url 'chores:assign' chore.pk %}?who={{ who }}"
+            hx-post="{% url 'chores:assign' chore.pk %}?who={{ who }}" hx-target="#chore-lists">
+        {% csrf_token %}
+        <label class="visually-hidden" for="assignee-{{ chore.pk }}">Assign to</label>
+        <select name="assignee" id="assignee-{{ chore.pk }}">
+          <option value="">Unassigned</option>
+          {% for member in members %}
+            <option value="{{ member.pk }}"{% if member.pk == chore.assignee_id %} selected{% endif %}>{{ member.get_username }}</option>
+          {% endfor %}
+        </select>
+        <label><input type="checkbox" name="include_future"> Also future ones</label>
+        <button type="submit" class="link-button">Save</button>
+      </form>
+    </details>
   </div>
   <form method="post" action="{% url 'chores:mark_done' chore.pk %}?who={{ who }}"
         hx-post="{% url 'chores:mark_done' chore.pk %}?who={{ who }}" hx-target="#chore-lists">
