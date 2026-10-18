@@ -19,6 +19,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Row actions (Done, Assign):** each `hx-post`s with `?who=` preserved, and `_lists_response()` in `views.py` returns `chores/_chore_lists.html` to replace `#chore-lists`, so the Mine/Everyone filter re-applies. Without htmx it redirects instead. `assign_chore()` changes only the chore unless `include_future`, which also sets the template's `default_assignee`. htmx sends the CSRF token through `hx-headers` on `<body>`.
 - **`/pickup/` form:** sections are shown or hidden with CSS `:has()`, with no JS. So hidden inputs must not carry `required`, which is why `ScheduleForm.use_required_attribute = False`. Inactive sections still post data. The view validates only the forms that the answers select.
 - **Theme:** the Nord colors are CSS variables under `:root[data-theme=dark|light]` in `base.html`. A script in `<head>` applies the saved choice before first paint.
+- **Design language:** all styles live in `base.html` and copy libadwaita widget classes. Reuse them in new templates instead of adding one-off styles.
+  - Page structure: `.headerbar`, `.banner`, `.clamp`.
+  - Lists: `.group` > `.heading` + `.boxed-list` > `.row` (with `.row-content`, `.row-subtitle` and `.suffix`).
+  - Buttons: `.button` with modifiers `.flat`, `.suggested`, `.pill` and `.icon-only`, plus `.linked` > `.toggle` for segmented choices.
+  - Popovers and menus: `details.popover-menu` > `.popover`, with `.menu-item` entries.
+  - Labels follow GNOME's capitalization rules: headings and buttons use header capitalization, everything else uses sentence case.
+  - Popovers are `<details>` elements. A script in `base.html` closes them on an outside click or Escape.
+- **Previewing pages without the browser extension:** render a view through `RequestFactory(HTTP_HOST='localhost')` in `manage.py shell`, save the HTML, then run `google-chrome --headless=new --screenshot`.
 
 ## Environment gotchas
 

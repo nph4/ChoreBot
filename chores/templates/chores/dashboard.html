@@ -1,20 +1,24 @@
 {% extends "chores/base.html" %}
 
 {% block title %}Today · ChoreBot{% endblock %}
+{% block headerbar_title %}Today{% endblock %}
+
+{% block banner %}
+  {% if needs_pickup_setup %}
+    <div class="banner" role="status">
+      <span>Set up your pickup schedule so ChoreBot can remind you to take the bins out.</span>
+      <a class="button suggested" href="{% url 'chores:pickup_setup' %}">Set Up</a>
+    </div>
+  {% endif %}
+{% endblock %}
 
 {% block content %}
-  {% if needs_pickup_setup %}
-    <p class="notice">
-      When are your garbage and recycling picked up?
-      <a href="{% url 'chores:pickup_setup' %}">Set up your pickup schedule</a>
-      so ChoreBot can remind you to take the bins out.
-    </p>
-  {% endif %}
-  <p class="filter">
-    Show:
-    <a href="?who=everyone"{% if who == "everyone" %} class="current"{% endif %}>Everyone</a>
-    <a href="?who=mine"{% if who == "mine" %} class="current"{% endif %}>Mine</a>
-  </p>
+  <nav class="switcher" aria-label="Show chores for">
+    <div class="linked">
+      <a class="button toggle{% if who == "everyone" %} current{% endif %}" href="?who=everyone"{% if who == "everyone" %} aria-current="page"{% endif %}>Everyone</a>
+      <a class="button toggle{% if who == "mine" %} current{% endif %}" href="?who=mine"{% if who == "mine" %} aria-current="page"{% endif %}>Mine</a>
+    </div>
+  </nav>
   <div id="chore-lists">
     {% include "chores/_chore_lists.html" %}
   </div>

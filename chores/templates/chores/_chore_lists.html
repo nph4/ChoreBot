@@ -1,18 +1,20 @@
 {% if overdue %}
-  <h2 class="late">Overdue</h2>
-  <ul class="chores">{% for chore in overdue %}{% include "chores/_chore_row.html" %}{% endfor %}</ul>
+  <section class="group">
+    <h2 class="heading destructive">Overdue</h2>
+    <ul class="boxed-list">{% for chore in overdue %}{% include "chores/_chore_row.html" %}{% endfor %}</ul>
+  </section>
 {% endif %}
 
-<h2>Due today</h2>
-{% if due_today %}
-  <ul class="chores">{% for chore in due_today %}{% include "chores/_chore_row.html" %}{% endfor %}</ul>
-{% else %}
-  <p class="empty">Nothing due today.</p>
-{% endif %}
+<section class="group">
+  <h2 class="heading">Due Today</h2>
+  <ul class="boxed-list">
+    {% for chore in due_today %}{% include "chores/_chore_row.html" %}{% empty %}<li class="row placeholder">Nothing due today</li>{% endfor %}
+  </ul>
+</section>
 
-<h2>Coming up</h2>
-{% if upcoming %}
-  <ul class="chores">{% for chore in upcoming %}{% include "chores/_chore_row.html" %}{% endfor %}</ul>
-{% else %}
-  <p class="empty">Nothing in the next 7 days.</p>
-{% endif %}
+<section class="group">
+  <h2 class="heading">Coming Up</h2>
+  <ul class="boxed-list">
+    {% for chore in upcoming %}{% include "chores/_chore_row.html" %}{% empty %}<li class="row placeholder">Nothing in the next 7 days</li>{% endfor %}
+  </ul>
+</section>

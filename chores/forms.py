@@ -44,7 +44,8 @@ class ScheduleForm(forms.Form):
     )
     pickup_time = forms.ChoiceField(
         label='Pickup time',
-        choices=[('am', 'Morning (AM) - due the night before'), ('pm', 'Afternoon (PM) - due that morning')],
+        help_text='Morning pickups are due the day before; afternoon pickups are due that morning.',
+        choices=[('am', 'Morning'), ('pm', 'Afternoon')],
         widget=forms.RadioSelect,
     )
 

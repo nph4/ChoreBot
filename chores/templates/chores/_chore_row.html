@@ -1,15 +1,28 @@
-<li class="chore">
-  <div>
-    <div class="title">{{ chore.template.title }}</div>
-    <div class="done-when">Done when: {{ chore.template.done_when }}</div>
-    <div class="meta">
+<li class="row">
+  <form method="post" action="{% url 'chores:mark_done' chore.pk %}?who={{ who }}"
+        hx-post="{% url 'chores:mark_done' chore.pk %}?who={{ who }}" hx-target="#chore-lists">
+    {% csrf_token %}
+    <button type="submit" class="check" aria-label="Mark “{{ chore.template.title }}” done" title="Mark Done">
+      <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.3 3.3 6 10.6 2.7 7.3 1.3 8.7 6 13.4l8.7-8.7z"/></svg>
+    </button>
+  </form>
+  <div class="row-content">
+    <div>{{ chore.template.title }}</div>
+    <div class="row-subtitle">Done when: {{ chore.template.done_when }}</div>
+    <div class="dim caption">
       {% if chore.template.area %}{{ chore.template.area }} · {% endif %}~{{ chore.template.estimated_minutes }} min
       · due {{ chore.due_date|date:"D j M" }}
-      · {% if chore.assignee %}{{ chore.assignee.get_username }}{% else %}unassigned{% endif %}
+      <span class="narrow-only">· {% if chore.assignee %}{{ chore.assignee.get_username }}{% else %}unassigned{% endif %}</span>
     </div>
-    <details class="assign">
-      <summary>Assign</summary>
-      <form method="post" action="{% url 'chores:assign' chore.pk %}?who={{ who }}"
+  </div>
+  <details class="popover-menu">
+    <summary class="button flat assign-button" title="Assign">
+      <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM3 15c0-2.8 2.2-5 5-5s5 2.2 5 5z"/></svg>
+      <span class="assignee-name">{% if chore.assignee %}{{ chore.assignee.get_username }}{% else %}Unassigned{% endif %}</span>
+    </summary>
+    <div class="popover">
+      <div class="heading">Assign To</div>
+      <form class="stack" method="post" action="{% url 'chores:assign' chore.pk %}?who={{ who }}"
             hx-post="{% url 'chores:assign' chore.pk %}?who={{ who }}" hx-target="#chore-lists">
         {% csrf_token %}
         <label class="visually-hidden" for="assignee-{{ chore.pk }}">Assign to</label>
@@ -19,14 +32,9 @@
             <option value="{{ member.pk }}"{% if member.pk == chore.assignee_id %} selected{% endif %}>{{ member.get_username }}</option>
           {% endfor %}
         </select>
-        <label><input type="checkbox" name="include_future"> Also future ones</label>
-        <button type="submit" class="link-button">Save</button>
+        <label class="check-label"><input type="checkbox" name="include_future"> Also future ones</label>
+        <button type="submit" class="button suggested">Assign</button>
       </form>
-    </details>
-  </div>
-  <form method="post" action="{% url 'chores:mark_done' chore.pk %}?who={{ who }}"
-        hx-post="{% url 'chores:mark_done' chore.pk %}?who={{ who }}" hx-target="#chore-lists">
-    {% csrf_token %}
-    <button type="submit" class="done-btn">Done</button>
-  </form>
+    </div>
+  </details>
 </li>

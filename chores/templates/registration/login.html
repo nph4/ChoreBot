@@ -1,12 +1,28 @@
 {% extends "chores/base.html" %}
 
-{% block title %}Log in · ChoreBot{% endblock %}
+{% block title %}Log In · ChoreBot{% endblock %}
 
 {% block content %}
-  <form method="post" class="login">
+  <form method="post" novalidate>
     {% csrf_token %}
-    {{ form.as_p }}
     <input type="hidden" name="next" value="{{ next }}">
-    <button type="submit" class="done-btn">Log in</button>
+    <section class="group">
+      <h2 class="heading">Log In</h2>
+      {% if form.non_field_errors %}<p class="error">{{ form.non_field_errors|join:" " }}</p>{% endif %}
+      <ul class="boxed-list">
+        {% for field in form %}
+          <li class="row entry-row">
+            <div class="row-content">
+              <label for="{{ field.id_for_label }}" class="row-subtitle">{{ field.label }}</label>
+              {{ field }}
+              {{ field.errors }}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+    <div class="actions">
+      <button type="submit" class="button suggested pill">Log In</button>
+    </div>
   </form>
 {% endblock %}

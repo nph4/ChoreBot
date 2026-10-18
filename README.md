@@ -23,8 +23,15 @@ The goal is to generate SMART (Specific, Measurable, Assignable, Realistic, Time
   3. For each schedule: how often (weekly, every other week, or every N weeks), the next pickup day, and whether pickup is AM or PM. AM pickups are due the day before. PM pickups are due the morning of pickup.
 
   The dashboard prompts for this setup until it's done.
-- **Household members.** Any active user account can be assigned chores; add members as users in the admin. Each chore on the dashboard has an **Assign** control: pick a person (or Unassigned) and tick **Also future ones** to make them the default for that chore's later occurrences too, or leave it unticked to change only this one. The **Mine** filter shows chores assigned to you; **Everyone** shows all.
-- **Light and dark mode.** Uses the [Nord](https://www.nordtheme.com/) palette. Dark is the default, and each browser remembers its own choice.
+- **Household members.** Any active user account can be assigned chores; add members as users in the admin. Each chore on the dashboard has an **Assign** button (the person icon): pick a person (or Unassigned) and tick **Also future ones** to make them the default for that chore's later occurrences too, or leave it unticked to change only this one. The **Mine** filter shows chores assigned to you; **Everyone** shows all.
+- **GNOME-style interface.** Follows Adwaita / GNOME design patterns:
+  - a header bar with a main menu
+  - grouped, rounded lists of rows
+  - a round check button to complete a chore
+  - popovers for assigning chores
+  - pill-shaped primary buttons
+  - a phone-friendly layout
+- **Light and dark style.** Uses the [Nord](https://www.nordtheme.com/) palette. Dark is the default. Switch in the main menu (Dark Style), and each browser remembers its own choice.
 - **Admin.** Chore templates, chores and pickup schedules are managed in the Django admin at `/admin/`.
 
 ## Architecture
