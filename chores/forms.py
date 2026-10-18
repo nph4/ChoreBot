@@ -1,5 +1,7 @@
 from django import forms
 from django.contrib.auth import get_user_model
+from django.contrib.auth.forms import UserCreationForm
+from django.utils import timezone
 
 YES_NO = [('yes', 'Yes'), ('no', 'No')]
 WEEKLY, EVERY_OTHER_WEEK, CUSTOM = 'weekly', 'every_other_week', 'custom'
@@ -71,3 +73,65 @@ class ScheduleForm(forms.Form):
             'next_pickup': schedule.next_pickup_on_or_after(today),
             'pickup_time': 'am' if schedule.am_pickup else 'pm',
         }
+
+
+REPEAT_DAYS = {'once': None, 'daily': 1, 'weekly': 7, 'monthly': 30}
+
+
+class TaskForm(forms.Form):
+    """A custom chore, repeating or one-off."""
+
+    title = forms.CharField(max_length=200)
+    area = forms.CharField(max_length=100, required=False, help_text='Room or place, e.g. "Garage".')
+    done_when = forms.CharField(max_length=300, label='Done when', help_text='What "done" looks like.')
+    estimated_minutes = forms.IntegerField(label='Minutes', min_value=1, max_value=600, initial=15)
+    repeat = forms.ChoiceField(
+        choices=[('once', 'Once'), ('daily', 'Daily'), ('weekly', 'Weekly'), ('monthly', 'Monthly'), ('custom', 'Custom')],
+        widget=forms.RadioSelect,
+        initial='once',
+        help_text='Repeats count from when the last one was done. Monthly means every 30 days.',
+    )
+    every_days = forms.IntegerField(label='Every how many days?', min_value=1, max_value=365, required=False)
+    start_date = forms.DateField(label='Due', widget=forms.DateInput(attrs={'type': 'date'}))
+    assignee = forms.ModelChoiceField(
+        queryset=get_user_model().objects.filter(is_active=True).order_by('username'),
+        required=False,
+        empty_label='Unassigned',
+        label='Assign to',
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['start_date'].initial = timezone.localdate()
+
+    def clean(self):
+        cleaned = super().clean()
+        repeat = cleaned.get('repeat')
+        if repeat == 'custom':
+            if not cleaned.get('every_days'):
+                self.add_error('every_days', 'Enter how many days apart it repeats.')
+        else:
+            cleaned['every_days'] = REPEAT_DAYS.get(repeat)
+        return cleaned
+
+    def task_fields(self):
+        """Keyword arguments for services.create_task."""
+        c = self.cleaned_data
+        return {
+            'title': c['title'], 'area': c['area'], 'done_when': c['done_when'],
+            'estimated_minutes': c['estimated_minutes'], 'every_days': c['every_days'],
+            'start_date': c['start_date'], 'assignee': c['assignee'],
+        }
+
+
+class NewUserForm(UserCreationForm):
+    is_admin = forms.BooleanField(
+        label='Administrator', required=False, help_text='Can create users and use the admin site.'
+    )
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.is_staff = user.is_superuser = self.cleaned_data['is_admin']
+        if commit:
+            user.save()
+        return user

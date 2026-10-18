@@ -14,10 +14,11 @@ PICKUP_CHORES = {
 
 
 def next_due_date(template, today):
-    """Due date for a template's next chore.
+    """Due date for a template's next chore, or None if there is no next one.
 
-    Pickup templates follow their PickupSchedule. Others are due today if never
-    completed, otherwise every_days after the last completion.
+    Pickup templates follow their PickupSchedule. Others are due on today (or
+    start_date, if later) when never completed, otherwise every_days after the
+    last completion. A completed one-off has no next chore.
     """
     last = (
         template.chores.filter(completed_at__isnull=False).order_by('-completed_at').first()
@@ -31,7 +32,9 @@ def next_due_date(template, today):
         after = max(last.due_date, timezone.localdate(last.completed_at)) + timedelta(days=1)
         return schedule.next_due_date(after)
     if last is None:
-        return today
+        return max(today, template.start_date) if template.start_date else today
+    if template.is_one_off:
+        return None
     return timezone.localdate(last.completed_at) + timedelta(days=template.every_days)
 
 
@@ -41,13 +44,16 @@ def generate_due_chores(today=None):
     created = []
     has_open = Chore.objects.filter(template=OuterRef('pk'), completed_at__isnull=True)
     for template in ChoreTemplate.objects.filter(active=True).exclude(Exists(has_open)):
+        due_date = next_due_date(template, today)
+        if due_date is None:
+            continue
         try:
             with transaction.atomic():
                 created.append(
                     Chore.objects.create(
                         template=template,
                         assignee=template.default_assignee,
-                        due_date=next_due_date(template, today),
+                        due_date=due_date,
                     )
                 )
         except IntegrityError:
@@ -115,3 +121,62 @@ def active_pickup_schedules():
     return {
         s.stream: s for s in PickupSchedule.objects.filter(template__active=True).select_related('template')
     }
+
+
+def create_task(*, title, area, done_when, estimated_minutes, every_days, start_date, assignee):
+    """Create a custom chore template (every_days=None for one-off) and its first chore."""
+    template = ChoreTemplate.objects.create(
+        title=title, area=area, done_when=done_when, estimated_minutes=estimated_minutes,
+        every_days=every_days, start_date=start_date, default_assignee=assignee,
+    )
+    generate_due_chores()
+    return template
+
+
+def _projected_after(chore, schedule, today):
+    """Due date of the occurrence after an open chore, assuming it's done on time (or today if late)."""
+    template = chore.template
+    if schedule is not None:
+        return schedule.next_due_date(max(chore.due_date, today) + timedelta(days=1))
+    if template.is_one_off:
+        return None
+    return max(chore.due_date, today) + timedelta(days=template.every_days)
+
+
+def calendar_entries(start, end, assignee=None, today=None):
+    """Chores to show on a calendar between start and end (inclusive), keyed by date.
+
+    Each entry is (kind, template, chore_or_None, assignee), where kind is 'done'
+    (shown on its completion day), 'open', 'overdue', or 'projected' (a future
+    repeat computed from the template's rule; it doesn't exist yet). Pass
+    assignee to keep only that person's entries.
+    """
+    today = today or timezone.localdate()
+    entries = {}
+
+    def add(day, kind, template, chore, who):
+        if start <= day <= end and (assignee is None or who == assignee):
+            entries.setdefault(day, []).append((kind, template, chore, who))
+
+    for chore in Chore.objects.filter(
+        completed_at__date__gte=start - timedelta(days=1), completed_at__date__lte=end + timedelta(days=1)
+    ).select_related('template', 'completed_by', 'assignee'):
+        add(timezone.localdate(chore.completed_at), 'done', chore.template, chore, chore.assignee)
+
+    schedules = {s.template_id: s for s in PickupSchedule.objects.all()}
+    for chore in Chore.objects.filter(completed_at__isnull=True, template__active=True).select_related(
+        'template', 'assignee', 'template__default_assignee'
+    ):
+        add(chore.due_date, 'overdue' if chore.due_date < today else 'open', chore.template, chore, chore.assignee)
+        schedule = schedules.get(chore.template_id)
+        day = _projected_after(chore, schedule, today)
+        while day is not None and day <= end:
+            add(day, 'projected', chore.template, None, chore.template.default_assignee)
+            if schedule is not None:
+                day = schedule.next_due_date(day + timedelta(days=1))
+            else:
+                day += timedelta(days=chore.template.every_days)
+
+    for day_entries in entries.values():
+        day_entries.sort(key=lambda e: (e[0] == 'projected', e[1].title))
+    return entries

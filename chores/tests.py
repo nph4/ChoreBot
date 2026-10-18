@@ -281,3 +281,143 @@ class AssignTests(TestCase):
     def test_dashboard_lists_members_to_assign(self):
         response = self.client.get(reverse('chores:dashboard'))
         self.assertContains(response, f'<option value="{self.other.pk}">sam</option>', html=True)
+
+
+class CustomTaskTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('alex', password='pw')
+        self.client.force_login(self.user)
+        self.today = timezone.localdate()
+
+    def post_task(self, **overrides):
+        data = {
+            'title': 'Clean gutters', 'area': 'Outside', 'done_when': 'Gutters clear',
+            'estimated_minutes': '45', 'repeat': 'once', 'start_date': self.today.isoformat(), 'assignee': '',
+        }
+        data.update(overrides)
+        return self.client.post(reverse('chores:new_task'), data)
+
+    def test_one_off_is_created_and_not_repeated(self):
+        response = self.post_task()
+        self.assertRedirects(response, reverse('chores:dashboard'))
+        template = ChoreTemplate.objects.get(title='Clean gutters')
+        self.assertTrue(template.is_one_off)
+        chore = Chore.objects.get(template=template)
+        complete_chore(chore, self.user)
+        generate_due_chores()
+        self.assertFalse(template.chores.filter(completed_at__isnull=True).exists())
+
+    def test_repeat_presets(self):
+        for repeat, days in [('daily', 1), ('weekly', 7), ('monthly', 30)]:
+            self.post_task(title=repeat, repeat=repeat)
+            self.assertEqual(ChoreTemplate.objects.get(title=repeat).every_days, days)
+
+    def test_custom_repeat_requires_day_count(self):
+        response = self.post_task(repeat='custom')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(ChoreTemplate.objects.exists())
+        self.post_task(repeat='custom', every_days='10')
+        self.assertEqual(ChoreTemplate.objects.get().every_days, 10)
+
+    def test_future_due_date_and_assignee(self):
+        due = self.today + timedelta(days=5)
+        self.post_task(start_date=due.isoformat(), assignee=str(self.user.pk))
+        chore = Chore.objects.get()
+        self.assertEqual(chore.due_date, due)
+        self.assertEqual(chore.assignee, self.user)
+
+    def test_success_toast(self):
+        response = self.post_task()
+        self.assertContains(self.client.get(response.url), 'Clean gutters” created')
+
+
+class CalendarTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('alex', password='pw')
+        self.client.force_login(self.user)
+        self.today = timezone.localdate()
+
+    def entries(self, **params):
+        response = self.client.get(reverse('chores:calendar'), params)
+        self.assertEqual(response.status_code, 200)
+        return {
+            (day, kind, template.title)
+            for week in response.context['weeks'] for day, entries in week for kind, template, _, _ in entries
+        }
+
+    def test_open_done_and_projected(self):
+        template = make_template(title='Water plants', every_days=3)
+        [chore] = generate_due_chores()
+        complete_chore(chore, self.user)
+        entries = self.entries()
+        self.assertIn((self.today, 'done', 'Water plants'), entries)
+        self.assertIn((self.today + timedelta(days=3), 'open', 'Water plants'), entries)
+        self.assertIn((self.today + timedelta(days=6), 'projected', 'Water plants'), entries)
+
+    def test_one_off_has_no_projections(self):
+        make_template(title='Fix fence', every_days=None)
+        generate_due_chores()
+        kinds = [kind for _, kind, title in self.entries() if title == 'Fix fence']
+        self.assertEqual(kinds, ['open'])
+
+    def test_pickup_projections_follow_schedule(self):
+        anchor = self.today + timedelta(days=2)
+        save_pickup_schedules({PickupSchedule.GARBAGE: (2, anchor, False)})
+        month = anchor.strftime('%Y-%m')
+        days = sorted(day for day, kind, title in self.entries(month=month) if title == 'Take out garbage')
+        self.assertEqual(days[0], anchor)
+        self.assertTrue(all((b - a).days == 14 for a, b in zip(days, days[1:])))
+
+    def test_mine_filter(self):
+        other = get_user_model().objects.create_user('sam')
+        make_template(title='Mine', default_assignee=self.user)
+        make_template(title='Theirs', default_assignee=other)
+        generate_due_chores()
+        titles = {title for _, _, title in self.entries(who='mine')}
+        self.assertEqual(titles, {'Mine'})
+
+    def test_month_navigation_and_bad_input(self):
+        response = self.client.get(reverse('chores:calendar'), {'month': '2027-02'})
+        self.assertEqual(response.context['month'], date(2027, 2, 1))
+        self.assertEqual(response.context['prev_month'], '2027-01')
+        self.assertEqual(response.context['next_month'], '2027-03')
+        response = self.client.get(reverse('chores:calendar'), {'month': 'nonsense'})
+        self.assertEqual(response.context['month'], self.today.replace(day=1))
+
+
+class NewUserTests(TestCase):
+    def setUp(self):
+        self.url = reverse('chores:new_user')
+        self.admin = get_user_model().objects.create_superuser('admin', password='pw')
+        self.member = get_user_model().objects.create_user('alex', password='pw')
+
+    def test_non_superuser_is_forbidden_and_menu_hides_it(self):
+        self.client.force_login(self.member)
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+        self.assertNotContains(self.client.get(reverse('chores:dashboard')), self.url)
+
+    def test_superuser_creates_member(self):
+        self.client.force_login(self.admin)
+        self.assertContains(self.client.get(reverse('chores:dashboard')), self.url)
+        response = self.client.post(self.url, {
+            'username': 'sam', 'password1': 'a-long-test-passphrase-42', 'password2': 'a-long-test-passphrase-42',
+        })
+        self.assertRedirects(response, reverse('chores:dashboard'))
+        sam = get_user_model().objects.get(username='sam')
+        self.assertTrue(sam.check_password('a-long-test-passphrase-42'))
+        self.assertFalse(sam.is_superuser)
+
+    def test_superuser_creates_admin(self):
+        self.client.force_login(self.admin)
+        self.client.post(self.url, {
+            'username': 'pat', 'password1': 'a-long-test-passphrase-42', 'password2': 'a-long-test-passphrase-42',
+            'is_admin': 'on',
+        })
+        pat = get_user_model().objects.get(username='pat')
+        self.assertTrue(pat.is_superuser and pat.is_staff)
+
+    def test_password_mismatch(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(self.url, {'username': 'sam', 'password1': 'a-long-test-passphrase-42', 'password2': 'different-passphrase-99'})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(get_user_model().objects.filter(username='sam').exists())

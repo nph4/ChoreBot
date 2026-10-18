@@ -1,17 +1,22 @@
-from datetime import timedelta
+import calendar
+from datetime import date, timedelta
+from functools import wraps
 
+from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils import timezone
+from django.utils import formats, timezone
 from django.views.decorators.http import require_POST
 
-from .forms import AssignForm, PickupSetupForm, ScheduleForm
+from .forms import AssignForm, NewUserForm, PickupSetupForm, ScheduleForm, TaskForm
 from .models import Chore, PickupSchedule
 from .services import (
-    active_pickup_schedules, assign_chore, complete_chore, generate_due_chores, save_pickup_schedules,
+    active_pickup_schedules, assign_chore, calendar_entries, complete_chore, create_task,
+    generate_due_chores, save_pickup_schedules,
 )
 
 UPCOMING_DAYS = 7
@@ -110,3 +115,69 @@ def pickup_setup(request):
         'shared': shared,
         'bins': [(label, stream, bins[stream]) for stream, label in PickupSchedule.STREAM_CHOICES],
     })
+
+
+def superuser_required(view):
+    @wraps(view)
+    @login_required
+    def wrapped(request, *args, **kwargs):
+        if not request.user.is_superuser:
+            raise PermissionDenied
+        return view(request, *args, **kwargs)
+    return wrapped
+
+
+def _parse_month(value, today):
+    try:
+        year, month = (int(part) for part in value.split('-'))
+        return date(year, month, 1)
+    except (AttributeError, ValueError):
+        return today.replace(day=1)
+
+
+@login_required
+def calendar_view(request):
+    """Month grid of done, open, overdue and projected chores."""
+    generate_due_chores()
+    today = timezone.localdate()
+    month = _parse_month(request.GET.get('month'), today)
+    who = 'mine' if request.GET.get('who') == 'mine' else 'everyone'
+
+    # Django's FIRST_DAY_OF_WEEK counts from Sunday=0; Python's calendar from Monday=0.
+    first_weekday = (int(formats.get_format('FIRST_DAY_OF_WEEK')) - 1) % 7
+    weeks = calendar.Calendar(first_weekday).monthdatescalendar(month.year, month.month)
+    entries = calendar_entries(
+        weeks[0][0], weeks[-1][-1], assignee=request.user if who == 'mine' else None, today=today
+    )
+    prev_month = (month - timedelta(days=1)).replace(day=1)
+    next_month = (month + timedelta(days=31)).replace(day=1)
+    return render(request, 'chores/calendar.html', {
+        'who': who,
+        'month': month,
+        'today': today,
+        'weekday_names': [calendar.day_abbr[(first_weekday + i) % 7] for i in range(7)],
+        'weeks': [[(day, entries.get(day, [])) for day in week] for week in weeks],
+        'prev_month': prev_month.strftime('%Y-%m'),
+        'next_month': next_month.strftime('%Y-%m'),
+        'this_month': today.strftime('%Y-%m'),
+    })
+
+
+@login_required
+def new_task(request):
+    form = TaskForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        template = create_task(**form.task_fields())
+        messages.success(request, f'“{template.title}” created')
+        return redirect('chores:dashboard')
+    return render(request, 'chores/task_form.html', {'form': form})
+
+
+@superuser_required
+def new_user(request):
+    form = NewUserForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        user = form.save()
+        messages.success(request, f'User “{user.get_username()}” created')
+        return redirect('chores:dashboard')
+    return render(request, 'chores/user_form.html', {'form': form})

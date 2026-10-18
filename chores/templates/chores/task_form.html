@@ -1,0 +1,21 @@
+{% extends "chores/base.html" %}
+
+{% block title %}New Task · ChoreBot{% endblock %}
+{% block headerbar_title %}New Task{% endblock %}
+
+{% block extra_style %}
+  #task-form .boxed-list:not(:has(input[name="repeat"][value="custom"]:checked)) .field-every_days { display: none; }
+{% endblock %}
+
+{% block content %}
+  <form method="post" id="task-form" novalidate>
+    {% csrf_token %}
+    <section class="group">
+      <h2 class="heading">Task</h2>
+      <ul class="boxed-list">{% include "chores/_form_rows.html" %}</ul>
+    </section>
+    <div class="actions">
+      <button type="submit" class="button suggested pill">Create Task</button>
+    </div>
+  </form>
+{% endblock %}

@@ -17,15 +17,30 @@ The goal is to generate SMART (Specific, Measurable, Assignable, Realistic, Time
 
   Chores are generated from these templates by rules, with no AI.
 - **Today dashboard.** Lists Overdue, Due today and Coming up (next 7 days), with an Everyone/Mine filter. Marking a chore done schedules the next one straight away.
+- **Calendar.** A month view, opened from the main menu (☰ → Calendar). It shows:
+  - open chores, with overdue ones in red
+  - chores already done, on the day they were done
+  - **projected repeats**, outlined: future occurrences worked out from each chore's repeat rule
+
+  Projections assume each chore is done on time. Pickup projections follow the pickup schedule. Everyone/Mine works here too, and on a phone the month turns into a list of only the days that have chores.
+- **Custom tasks.** ☰ → New Task… adds your own chore. It has:
+  - title, area and what "done" looks like
+  - estimated minutes
+  - a first due date
+  - who to assign it to
+  - how it repeats: **Once** (one-off), **Daily**, **Weekly**, **Monthly** (every 30 days) or **Custom** (every N days)
+
+  Repeats count from when the last one was done. A one-off disappears once it's done.
 - **Garbage, recycling and compost pickup.** Many cities don't collect every bin every week. Portland, OR, for example, collects recycling and compost weekly and garbage every other week. The pickup setup page asks:
   1. Are all bins picked up on the same schedule and day? If yes, you enter one schedule for all of them. If no, you enter a schedule for each bin.
   2. Do you also have compost/yard waste pickup?
   3. For each schedule: how often (weekly, every other week, or every N weeks), the next pickup day, and whether pickup is AM or PM. AM pickups are due the day before. PM pickups are due the morning of pickup.
 
   The dashboard prompts for this setup until it's done.
-- **Household members.** Any active user account can be assigned chores; add members as users in the admin. Each chore on the dashboard has an **Assign** button (the person icon): pick a person (or Unassigned) and tick **Also future ones** to make them the default for that chore's later occurrences too, or leave it unticked to change only this one. The **Mine** filter shows chores assigned to you; **Everyone** shows all.
+- **Household members.** Any active user account can be assigned chores. Superusers can add members from ☰ → New User…; switch on **Administrator** to let that person create users and use the admin site too. Each chore on the dashboard has an **Assign** button (the person icon): pick a person (or Unassigned) and tick **Also future ones** to make them the default for that chore's later occurrences too, or leave it unticked to change only this one. The **Mine** filter shows chores assigned to you; **Everyone** shows all.
 - **GNOME-style interface.** Follows Adwaita / GNOME design patterns:
   - a header bar with a main menu
+  - toasts confirming actions
   - grouped, rounded lists of rows
   - a round check button to complete a chore
   - popovers for assigning chores

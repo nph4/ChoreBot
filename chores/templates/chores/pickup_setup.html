@@ -38,14 +38,14 @@
     <div class="schedules">
       <section class="group shared">
         <h2 class="heading">All Bins</h2>
-        <ul class="boxed-list">{% include "chores/_schedule_fields.html" with form=shared %}</ul>
+        <ul class="boxed-list">{% include "chores/_form_rows.html" with form=shared %}</ul>
       </section>
 
       <div class="per-bin">
         {% for label, stream, form in bins %}
           <section class="group bin-{{ stream }}">
             <h2 class="heading">{{ label }}</h2>
-            <ul class="boxed-list">{% include "chores/_schedule_fields.html" with form=form %}</ul>
+            <ul class="boxed-list">{% include "chores/_form_rows.html" with form=form %}</ul>
           </section>
         {% endfor %}
       </div>

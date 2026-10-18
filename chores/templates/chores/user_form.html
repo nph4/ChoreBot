@@ -1,0 +1,17 @@
+{% extends "chores/base.html" %}
+
+{% block title %}New User · ChoreBot{% endblock %}
+{% block headerbar_title %}New User{% endblock %}
+
+{% block content %}
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <section class="group">
+      <h2 class="heading">Household Member</h2>
+      <ul class="boxed-list">{% include "chores/_form_rows.html" %}</ul>
+    </section>
+    <div class="actions">
+      <button type="submit" class="button suggested pill">Create User</button>
+    </div>
+  </form>
+{% endblock %}

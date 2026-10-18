@@ -1,0 +1,95 @@
+{% extends "chores/base.html" %}
+
+{% block title %}Calendar · ChoreBot{% endblock %}
+{% block headerbar_title %}Calendar{% endblock %}
+{% block main_class %}wide{% endblock %}
+
+{% block extra_style %}
+  .clamp.wide { max-width: 1100px; }
+  .cal-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+  .cal-toolbar .month { display: flex; align-items: center; gap: 6px; }
+  .cal-toolbar h2 { font-size: 1.15rem; margin: 0 6px; min-width: 9.5em; text-align: center; }
+  .cal { background: var(--card); border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 1px var(--line), 0 1px 3px 1px var(--shadow); }
+  .cal-head, .cal-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .cal-head div { padding: 8px; font-size: .82rem; font-weight: 700; color: var(--muted); text-align: center; border-bottom: 1px solid var(--line); }
+  .cal-week + .cal-week { border-top: 1px solid var(--line); }
+  .cal-day { min-height: 7.5rem; padding: 6px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .cal-day + .cal-day { border-left: 1px solid var(--line); }
+  .cal-day.outside { background: color-mix(in srgb, var(--bg) 55%, var(--card)); }
+  .cal-day.outside .daynum { opacity: .55; }
+  .daynum { font-size: .85rem; font-weight: 700; width: 1.9em; height: 1.9em; display: grid; place-items: center; border-radius: 50%; }
+  .cal-day.today .daynum { background: var(--accent); color: var(--on-accent); }
+  .daynum .wd { display: none; }
+  .entry {
+    font-size: .78rem; line-height: 1.3; padding: 2px 6px; border-radius: 6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  .entry.overdue { background: color-mix(in srgb, var(--late) 30%, transparent); }
+  .entry.done { background: none; color: var(--muted); text-decoration: line-through; }
+  .entry.projected { background: none; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
+  .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 16px; margin-top: 14px; }
+  .legend .entry { display: inline-block; }
+
+  /* Narrow (phone): the grid becomes an agenda of only the days that have chores. */
+  @media (max-width: 700px) {
+    .cal-head { display: none; }
+    .cal-body { margin-top: -1px; }
+    .cal-week { display: block; border-top: 0 !important; }
+    .cal-day { min-height: 0; flex-direction: row; flex-wrap: wrap; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--line); }
+    .cal-day + .cal-day { border-left: 0; }
+    .cal-day.empty { display: none; }
+    .daynum { flex-basis: 100%; display: block; width: auto; height: auto; border-radius: 0; background: none !important; color: inherit !important; }
+    .cal-day.today .daynum { color: var(--accent) !important; }
+    .daynum .wd { display: inline; }
+    .daynum .wd:first-child::after { content: " "; }
+    .daynum .wd:last-child::before { content: " "; }
+    .entry { white-space: normal; }
+  }
+{% endblock %}
+
+{% block content %}
+  <div class="cal-toolbar">
+    <div class="month">
+      <a class="button flat icon-only" href="?month={{ prev_month }}&who={{ who }}" title="Previous Month" aria-label="Previous Month">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.7 2.3 5 8l5.7 5.7 1.4-1.4L7.8 8l4.3-4.3z"/></svg>
+      </a>
+      <h2>{{ month|date:"F Y" }}</h2>
+      <a class="button flat icon-only" href="?month={{ next_month }}&who={{ who }}" title="Next Month" aria-label="Next Month">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.3 2.3 11 8l-5.7 5.7-1.4-1.4L8.2 8 3.9 3.7z"/></svg>
+      </a>
+      <a class="button" href="?month={{ this_month }}&who={{ who }}">Today</a>
+    </div>
+    <nav class="linked" aria-label="Show chores for">
+      <a class="button toggle{% if who == "everyone" %} current{% endif %}" href="?month={{ month|date:"Y-m" }}&who=everyone"{% if who == "everyone" %} aria-current="page"{% endif %}>Everyone</a>
+      <a class="button toggle{% if who == "mine" %} current{% endif %}" href="?month={{ month|date:"Y-m" }}&who=mine"{% if who == "mine" %} aria-current="page"{% endif %}>Mine</a>
+    </nav>
+  </div>
+
+  <div class="cal" role="grid" aria-label="{{ month|date:"F Y" }}">
+    <div class="cal-head" role="row">{% for name in weekday_names %}<div role="columnheader">{{ name }}</div>{% endfor %}</div>
+    <div class="cal-body">
+    {% for week in weeks %}
+      <div class="cal-week" role="row">
+        {% for day, entries in week %}
+          <div role="gridcell" class="cal-day{% if day.month != month.month %} outside{% endif %}{% if day == today %} today{% endif %}{% if not entries %} empty{% endif %}">
+            <div class="daynum"><span class="wd">{{ day|date:"D" }}</span>{{ day.day }}<span class="wd">{{ day|date:"M" }}</span></div>
+            {% for kind, template, chore, who_for in entries %}
+              <div class="entry {{ kind }}" title="{{ template.title }}{% if template.area %} · {{ template.area }}{% endif %}{% if who_for %} · {{ who_for.get_username }}{% endif %}{% if kind == "projected" %} (projected){% elif kind == "done" %} (done){% elif kind == "overdue" %} (overdue){% endif %}">
+                {% if kind == "done" %}<span class="visually-hidden">Done: </span>{% elif kind == "projected" %}<span class="visually-hidden">Projected: </span>{% elif kind == "overdue" %}<span class="visually-hidden">Overdue: </span>{% endif %}{{ template.title }}
+              </div>
+            {% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    {% endfor %}
+    </div>
+  </div>
+
+  <div class="legend dim caption" aria-hidden="true">
+    <span class="entry open">Due</span>
+    <span class="entry overdue">Overdue</span>
+    <span class="entry done">Done</span>
+    <span class="entry projected">Projected repeat</span>
+  </div>
+{% endblock %}

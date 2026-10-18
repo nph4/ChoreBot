@@ -8,7 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Each active template has at most one open chore, meaning `completed_at` is null. This is enforced by the `one_open_chore_per_template` DB constraint.
 - `generate_due_chores()` fills in the missing chores. It's idempotent and runs on every dashboard load and after `complete_chore()`, so there's no cron.
-- **Ordinary templates:** a chore is due today if the template has never been completed. Otherwise it's due on the last completion date + `every_days`.
+- **Ordinary templates:** a chore is due today (or on `start_date`, if that's later) if the template has never been completed. Otherwise it's due on the last completion date + `every_days`.
+- **One-off templates:** `every_days` is null. Once the template has a completed chore, `next_due_date()` returns None, and `generate_due_chores()` skips templates whose next due date is None.
+- **Calendar:** `calendar_entries()` doesn't store anything. For each open chore it projects repeats forward from max(due date, today), and for pickups it steps `next_due_date()`. Completed chores appear on their local completion date. Keep projection logic consistent with `next_due_date()` when either changes.
 - **Pickup templates:** a template with a linked `PickupSchedule` (one-to-one) ignores `every_days`. `next_pickup` is only an anchor date for the cycle.
   - The next due date is searched from the day after max(last due date, completion date), so an early or late completion never repeats a pickup.
   - `save_pickup_schedules()` replaces the whole setup and deletes open chores so they regenerate.
@@ -18,6 +20,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Row actions (Done, Assign):** each `hx-post`s with `?who=` preserved, and `_lists_response()` in `views.py` returns `chores/_chore_lists.html` to replace `#chore-lists`, so the Mine/Everyone filter re-applies. Without htmx it redirects instead. `assign_chore()` changes only the chore unless `include_future`, which also sets the template's `default_assignee`. htmx sends the CSRF token through `hx-headers` on `<body>`.
 - **`/pickup/` form:** sections are shown or hidden with CSS `:has()`, with no JS. So hidden inputs must not carry `required`, which is why `ScheduleForm.use_required_attribute = False`. Inactive sections still post data. The view validates only the forms that the answers select.
+- **Form pages:** render fields with `chores/_form_rows.html` inside a `.boxed-list`. It picks the row layout from `field.widget_type`: radio choices become linked toggles, checkboxes become switches, and text and password inputs stack under their label. Each row gets a `field-<name>` class for page-level `:has()` show/hide rules.
+- **Feedback:** use `messages.success()` for confirmations. `base.html` renders messages as toasts.
+- **Permissions:** `superuser_required` in `views.py` returns 403 to non-superusers. Hide matching menu items with `user.is_superuser`.
 - **Theme:** the Nord colors are CSS variables under `:root[data-theme=dark|light]` in `base.html`. A script in `<head>` applies the saved choice before first paint.
 - **Design language:** all styles live in `base.html` and copy libadwaita widget classes. Reuse them in new templates instead of adding one-off styles.
   - Page structure: `.headerbar`, `.banner`, `.clamp`.

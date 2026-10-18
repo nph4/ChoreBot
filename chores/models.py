@@ -5,7 +5,10 @@ from django.db import models
 
 
 class ChoreTemplate(models.Model):
-    """A recurring SMART chore definition that dated Chore instances are generated from."""
+    """A SMART chore definition that dated Chore instances are generated from.
+
+    every_days=None makes it a one-off: one chore is generated and, once completed, no more.
+    """
 
     title = models.CharField(max_length=200)
     area = models.CharField(max_length=100, blank=True)
@@ -13,7 +16,8 @@ class ChoreTemplate(models.Model):
         max_length=300, help_text='What "done" looks like, e.g. "counters clear and wiped".'
     )
     estimated_minutes = models.PositiveSmallIntegerField(default=10)
-    every_days = models.PositiveSmallIntegerField(default=7)
+    every_days = models.PositiveSmallIntegerField(default=7, null=True, blank=True)
+    start_date = models.DateField(null=True, blank=True, help_text='First occurrence is due no earlier than this.')
     default_assignee = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+'
     )
@@ -22,11 +26,18 @@ class ChoreTemplate(models.Model):
     class Meta:
         ordering = ['area', 'title']
         constraints = [
-            models.CheckConstraint(condition=models.Q(every_days__gte=1), name='every_days_at_least_1'),
+            models.CheckConstraint(
+                condition=models.Q(every_days__gte=1) | models.Q(every_days__isnull=True),
+                name='every_days_at_least_1',
+            ),
         ]
 
     def __str__(self):
         return f'{self.area}: {self.title}' if self.area else self.title
+
+    @property
+    def is_one_off(self):
+        return self.every_days is None
 
 
 class Chore(models.Model):

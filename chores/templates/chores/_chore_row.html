@@ -11,7 +11,7 @@
     <div class="row-subtitle">Done when: {{ chore.template.done_when }}</div>
     <div class="dim caption">
       {% if chore.template.area %}{{ chore.template.area }} · {% endif %}~{{ chore.template.estimated_minutes }} min
-      · due {{ chore.due_date|date:"D j M" }}
+      · due {{ chore.due_date|date:"D j M" }}{% if chore.template.is_one_off %} · one-off{% endif %}
       <span class="narrow-only">· {% if chore.assignee %}{{ chore.assignee.get_username }}{% else %}unassigned{% endif %}</span>
     </div>
   </div>
