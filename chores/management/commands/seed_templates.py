@@ -7,7 +7,6 @@ STARTER_TEMPLATES = [
     ('Kitchen', 'Do the dishes', 'Sink empty; dishes washed or in the dishwasher', 15, 1),
     ('Kitchen', 'Wipe counters and stovetop', 'Counters clear of clutter and wiped; stovetop wiped', 10, 2),
     ('Kitchen', 'Clean out the fridge', 'Expired food tossed; shelves wiped', 20, 14),
-    ('Kitchen', 'Take out trash and recycling', 'Bins emptied to the curb; fresh bags in', 5, 3),
     ('Bathroom', 'Clean the toilet', 'Bowl scrubbed; seat and base wiped', 10, 7),
     ('Bathroom', 'Clean sink and mirror', 'Sink scrubbed; mirror streak-free', 10, 7),
     ('Bathroom', 'Clean shower/tub', 'Walls and tub scrubbed; drain cleared', 20, 14),

@@ -3,6 +3,13 @@
 {% block title %}Today · ChoreBot{% endblock %}
 
 {% block content %}
+  {% if needs_pickup_setup %}
+    <p class="notice">
+      When are your garbage and recycling picked up?
+      <a href="{% url 'chores:pickup_setup' %}">Set up your pickup schedule</a>
+      so ChoreBot can remind you to take the bins out.
+    </p>
+  {% endif %}
   <p class="filter">
     Show:
     <a href="?who=everyone"{% if who == "everyone" %} class="current"{% endif %}>Everyone</a>

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Chore, ChoreTemplate
+from .models import Chore, ChoreTemplate, PickupSchedule
 
 
 @admin.register(ChoreTemplate)
@@ -15,3 +15,8 @@ class ChoreAdmin(admin.ModelAdmin):
     list_display = ['template', 'assignee', 'due_date', 'completed_at', 'completed_by']
     list_filter = ['assignee', ('completed_at', admin.EmptyFieldListFilter), 'template__area']
     date_hierarchy = 'due_date'
+
+
+@admin.register(PickupSchedule)
+class PickupScheduleAdmin(admin.ModelAdmin):
+    list_display = ['stream', 'every_weeks', 'next_pickup', 'am_pickup', 'template']

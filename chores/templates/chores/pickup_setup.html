@@ -1,0 +1,50 @@
+{% extends "chores/base.html" %}
+
+{% block title %}Pickup schedule · ChoreBot{% endblock %}
+
+{% block extra_style %}
+  #pickup-form fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 1rem; padding: .75rem 1rem; background: var(--card); }
+  #pickup-form legend { font-weight: 600; padding: 0 .25rem; }
+  #pickup-form .field { margin-bottom: .9rem; }
+  #pickup-form .field > label { display: block; font-weight: 600; margin-bottom: .25rem; }
+  #pickup-form .field div > div { margin: .15rem 0; }
+  /* Reveal only the questions that apply to the answers so far. */
+  #pickup-form:not(:has(input[name="same_schedule"]:checked)) .schedules,
+  #pickup-form:has(input[name="same_schedule"][value="yes"]:checked) .per-bin,
+  #pickup-form:has(input[name="same_schedule"][value="no"]:checked) .shared,
+  #pickup-form:not(:has(input[name="has_compost"][value="yes"]:checked)) .bin-compost,
+  .schedule-fields:not(:has(input[name$="frequency"][value="custom"]:checked)) .field-every_weeks { display: none; }
+{% endblock %}
+
+{% block content %}
+  <h2>Garbage &amp; recycling pickup</h2>
+  <form method="post" id="pickup-form" novalidate>
+    {% csrf_token %}
+    {{ setup.non_field_errors }}
+    {% for field in setup %}
+      <div class="field">
+        <label>{{ field.label }}</label>
+        {{ field.errors }}
+        {{ field }}
+      </div>
+    {% endfor %}
+
+    <div class="schedules">
+      <fieldset class="shared">
+        <legend>All bins</legend>
+        {% include "chores/_schedule_fields.html" with form=shared %}
+      </fieldset>
+
+      <div class="per-bin">
+        {% for label, stream, form in bins %}
+          <fieldset class="bin-{{ stream }}">
+            <legend>{{ label }}</legend>
+            {% include "chores/_schedule_fields.html" with form=form %}
+          </fieldset>
+        {% endfor %}
+      </div>
+
+      <button type="submit" class="done-btn">Save schedule</button>
+    </div>
+  </form>
+{% endblock %}

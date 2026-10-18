@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import models
 
@@ -56,3 +58,40 @@ class Chore(models.Model):
     @property
     def is_done(self):
         return self.completed_at is not None
+
+
+class PickupSchedule(models.Model):
+    """Curbside pickup for one bin; drives the due dates of its linked ChoreTemplate."""
+
+    GARBAGE = 'garbage'
+    RECYCLING = 'recycling'
+    COMPOST = 'compost'
+    STREAM_CHOICES = [
+        (GARBAGE, 'Garbage'),
+        (RECYCLING, 'Recycling'),
+        (COMPOST, 'Compost/yard waste'),
+    ]
+
+    stream = models.CharField(max_length=20, choices=STREAM_CHOICES, unique=True)
+    every_weeks = models.PositiveSmallIntegerField(default=1)
+    next_pickup = models.DateField(help_text='Any known pickup date; anchors the cycle.')
+    am_pickup = models.BooleanField(help_text='AM pickups are due the day before; PM pickups the same day.')
+    template = models.OneToOneField(ChoreTemplate, on_delete=models.CASCADE, related_name='pickup_schedule')
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=models.Q(every_weeks__gte=1), name='every_weeks_at_least_1'),
+        ]
+
+    def __str__(self):
+        return f'{self.get_stream_display()} every {self.every_weeks} week(s)'
+
+    def next_pickup_on_or_after(self, day):
+        period = 7 * self.every_weeks
+        cycles = -(-(day - self.next_pickup).days // period)  # ceiling division
+        return self.next_pickup + timedelta(days=cycles * period)
+
+    def next_due_date(self, on_or_after):
+        """Earliest chore due date >= on_or_after, where due = pickup day (minus one for AM)."""
+        lead = timedelta(days=1 if self.am_pickup else 0)
+        return self.next_pickup_on_or_after(on_or_after + lead) - lead

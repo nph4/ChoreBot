@@ -1,20 +1,33 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}ChoreBot{% endblock %}</title>
+  <script>
+    // Apply the saved theme before first paint; dark is the default.
+    try { if (localStorage.getItem('theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) {}
+  </script>
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
   <style>
-    :root { --bg: #fafaf7; --fg: #1d1d1b; --muted: #6b6b66; --card: #fff; --line: #e4e4de; --accent: #2f6f4f; --late: #b3412b; }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg: #161615; --fg: #ececea; --muted: #9a9a94; --card: #1f1f1d; --line: #33332f; --accent: #6fbf94; --late: #e07a62; }
+    /* Nord palette: https://www.nordtheme.com/docs/colors-and-palettes */
+    :root[data-theme="dark"] {
+      --bg: #2e3440; --card: #3b4252; --line: #4c566a; --fg: #eceff4; --muted: #d8dee9;
+      --accent: #88c0d0; --on-accent: #2e3440; --late: #bf616a; --notice: #434c5e;
+      color-scheme: dark;
+    }
+    :root[data-theme="light"] {
+      --bg: #eceff4; --card: #ffffff; --line: #d8dee9; --fg: #2e3440; --muted: #4c566a;
+      --accent: #5e81ac; --on-accent: #eceff4; --late: #bf616a; --notice: #e5e9f0;
+      color-scheme: light;
     }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.45 system-ui, sans-serif; }
     header, main { max-width: 44rem; margin: 0 auto; padding: 1rem; }
-    header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; }
     header h1 { font-size: 1.25rem; margin: 0; }
+    header nav { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+    header form { display: inline; }
     a { color: var(--accent); }
     button { font: inherit; cursor: pointer; }
     .link-button { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; }
@@ -23,27 +36,49 @@
     ul.chores { list-style: none; margin: 0; padding: 0; }
     .chore { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: .75rem 1rem; margin-bottom: .5rem; }
     .chore .title { font-weight: 600; }
-    .chore .meta, .chore .done-when, .empty { color: var(--muted); font-size: .9rem; }
-    .done-btn { flex-shrink: 0; background: var(--accent); color: var(--bg); border: 0; border-radius: 6px; padding: .4rem .9rem; }
+    .meta, .chore .done-when, .empty, .helptext { color: var(--muted); font-size: .9rem; }
+    .done-btn { flex-shrink: 0; background: var(--accent); color: var(--on-accent); border: 0; border-radius: 6px; padding: .4rem .9rem; font-weight: 600; }
+    .notice { background: var(--notice); border: 1px solid var(--line); border-radius: 8px; padding: .75rem 1rem; }
     .filter a { margin-left: .5rem; }
     .filter a.current { color: var(--fg); text-decoration: none; font-weight: 600; }
     form.login p { display: flex; flex-direction: column; gap: .25rem; }
-    form.login input { font: inherit; padding: .4rem; }
+    input, select { font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: .35rem; }
+    input[type="radio"] { padding: 0; }
+    .errorlist { color: var(--late); margin: .25rem 0; padding-left: 1.25rem; }
+    {% block extra_style %}{% endblock %}
   </style>
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   <header>
     <h1><a href="{% url 'chores:dashboard' %}">ChoreBot</a></h1>
-    {% if user.is_authenticated %}
-      <form method="post" action="{% url 'logout' %}">
-        {% csrf_token %}
-        <span class="meta">{{ user.get_username }}</span>
-        <button type="submit" class="link-button">Log out</button>
-      </form>
-    {% endif %}
+    <nav>
+      {% if user.is_authenticated %}
+        <a href="{% url 'chores:pickup_setup' %}">Pickup schedule</a>
+      {% endif %}
+      <button type="button" class="link-button" id="theme-toggle">Light mode</button>
+      {% if user.is_authenticated %}
+        <form method="post" action="{% url 'logout' %}">
+          {% csrf_token %}
+          <span class="meta">{{ user.get_username }}</span>
+          <button type="submit" class="link-button">Log out</button>
+        </form>
+      {% endif %}
+    </nav>
   </header>
   <main>
     {% block content %}{% endblock %}
   </main>
+  <script>
+    (function () {
+      var root = document.documentElement, button = document.getElementById('theme-toggle');
+      function label() { button.textContent = root.dataset.theme === 'dark' ? 'Light mode' : 'Dark mode'; }
+      button.addEventListener('click', function () {
+        root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+        try { localStorage.setItem('theme', root.dataset.theme); } catch (e) {}
+        label();
+      });
+      label();
+    })();
+  </script>
 </body>
 </html>
