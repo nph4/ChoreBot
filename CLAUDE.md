@@ -38,4 +38,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `DJANGO_SECRET_KEY` has no default, so `manage.py` outside Compose needs the `.env` vars exported.
 - The container runs as root. Files it writes into the bind mount, such as from `makemigrations`, end up owned by root. Re-own them with `cp f f.tmp && mv -f f.tmp f`.
 - Django's static file finder only picks up app `static/` folders that existed when the server started. After adding one, restart with `docker compose restart web`.
+- Static storage depends on `DJANGO_DEBUG` at settings load. With 1 (Compose dev) it's plain storage. With 0 it's WhiteNoise's manifest storage, where `{% static %}` raises an error for any file missing from the `collectstatic` output, so a new static file needs an image rebuild. The bind mount hides the image's `staticfiles/`, which is why `StaticFilesTests` turns on `WHITENOISE_USE_FINDERS`.
+- To check production behaviour, run the built image directly (it uses gunicorn) on the Compose network: `docker run --rm --network chore-bot_default --env-file .env -e DJANGO_DEBUG=0 -p 127.0.0.1:8001:8000 chore-bot-web`.
 - The remote is SSH (`git@github.com:nph4/ChoreBot.git`). HTTPS pushes can't prompt for credentials here.

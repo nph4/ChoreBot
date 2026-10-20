@@ -1,7 +1,8 @@
 from datetime import date, timedelta
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -421,3 +422,15 @@ class NewUserTests(TestCase):
         response = self.client.post(self.url, {'username': 'sam', 'password1': 'a-long-test-passphrase-42', 'password2': 'different-passphrase-99'})
         self.assertEqual(response.status_code, 200)
         self.assertFalse(get_user_model().objects.filter(username='sam').exists())
+
+
+class StaticFilesTests(TestCase):
+    # Under Compose the bind mount hides the image's collectstatic output, so let WhiteNoise
+    # find files in app static/ folders the way the hashed copies would be found in production.
+    @override_settings(WHITENOISE_USE_FINDERS=True)
+    def test_font_is_served_with_debug_off(self):
+        # The test runner forces DEBUG off, so this is WhiteNoise serving it, not Django's dev view.
+        self.assertFalse(settings.DEBUG)
+        response = self.client.get('/static/chores/fonts/AdwaitaSans-Regular.woff2')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'font/woff2')

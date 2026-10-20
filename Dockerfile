@@ -10,6 +10,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Placeholder key: settings refuse to load without one, and collectstatic doesn't use it.
+RUN DJANGO_SECRET_KEY=collectstatic-only python manage.py collectstatic --noinput
+
 EXPOSE 8000
 
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]

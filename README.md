@@ -51,7 +51,7 @@ The goal is to generate SMART (Specific, Measurable, Assignable, Realistic, Time
 
 ## Architecture
 
-- Django 6.1 app (Python 3.13), with server-rendered templates and [htmx](https://htmx.org/). htmx comes from unpkg. GNOME's [Adwaita Sans](https://gitlab.gnome.org/GNOME/adwaita-fonts) font (51.0, SIL Open Font License) is bundled in `chores/static/chores/fonts/`, converted to WOFF2. There's no frontend build step.
+- Django 6.1 app (Python 3.13), with server-rendered templates and [htmx](https://htmx.org/), run by gunicorn with WhiteNoise for static files. htmx comes from unpkg. GNOME's [Adwaita Sans](https://gitlab.gnome.org/GNOME/adwaita-fonts) font (51.0, SIL Open Font License) is bundled in `chores/static/chores/fonts/`, converted to WOFF2. There's no frontend build step.
 - PostgreSQL 17 database.
 - Both run in Docker containers via Docker Compose.
 
@@ -94,4 +94,4 @@ Settings come from environment variables in `.env` (see `.env.example`):
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT` | Database connection |
 | `TIME_ZONE` | e.g. `America/Los_Angeles`. Decides what "today" is for due dates. |
 
-In development, Compose runs Django's development server with the repo mounted into the container, so code changes reload live. The image's default command is gunicorn. Static files (the bundled font) are served by Django only when `DJANGO_DEBUG=1`; a non-debug deployment needs a static file server such as WhiteNoise.
+In development, Compose runs Django's development server with the repo mounted into the container, so code changes reload live. The image's default command is gunicorn, and with `DJANGO_DEBUG=0` static files (the bundled font, the admin's CSS) are served by [WhiteNoise](https://whitenoise.readthedocs.io/). The Dockerfile runs `collectstatic` at build time, which makes compressed copies with hashed file names that browsers can cache indefinitely, so rebuild the image after changing anything in `static/`.
