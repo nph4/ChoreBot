@@ -37,4 +37,5 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `DJANGO_SECRET_KEY` has no default, so `manage.py` outside Compose needs the `.env` vars exported.
 - The container runs as root. Files it writes into the bind mount, such as from `makemigrations`, end up owned by root. Re-own them with `cp f f.tmp && mv -f f.tmp f`.
+- Django's static file finder only picks up app `static/` folders that existed when the server started. After adding one, restart with `docker compose restart web`.
 - The remote is SSH (`git@github.com:nph4/ChoreBot.git`). HTTPS pushes can't prompt for credentials here.
