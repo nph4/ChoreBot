@@ -886,3 +886,107 @@ class UndoTests(TestCase):
                                     headers={'HX-Request': 'true'})
         self.assertContains(response, 'id="toasts"')
         self.assertNotContains(response, 'Undo')
+
+
+def next_weekday(after, weekday):
+    """First date strictly after `after` falling on weekday (Mon=0)."""
+    return after + timedelta(days=(weekday - after.weekday() - 1) % 7 + 1)
+
+
+class FixedDayTests(TestCase):
+    monday = date(2026, 10, 19)
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('alex', password='pw')
+        self.client.force_login(self.user)
+        self.today = timezone.localdate()
+
+    def fixed(self, weekdays, every_weeks=1, start_date=None, **kwargs):
+        return make_template(title='Mow lawn', every_days=None, weekdays=weekdays, every_weeks=every_weeks,
+                             start_date=start_date or self.today, **kwargs)
+
+    def test_next_fixed_day(self):
+        saturdays = self.fixed('5', start_date=self.monday)
+        self.assertEqual(saturdays.next_fixed_day(self.monday), date(2026, 10, 24))
+        self.assertEqual(saturdays.next_fixed_day(date(2026, 10, 24)), date(2026, 10, 31))
+        mwf = self.fixed('024', start_date=self.monday)
+        self.assertEqual(mwf.next_fixed_day(self.monday), date(2026, 10, 21))
+        self.assertEqual(mwf.next_fixed_day(date(2026, 10, 23)), date(2026, 10, 26))
+
+    def test_every_other_week_counts_from_start_week(self):
+        sundays = self.fixed('6', every_weeks=2, start_date=date(2026, 10, 25))
+        self.assertEqual(sundays.next_fixed_day(date(2026, 10, 20)), date(2026, 10, 25))
+        self.assertEqual(sundays.next_fixed_day(date(2026, 10, 25)), date(2026, 11, 8))
+        self.assertEqual(sundays.next_fixed_day(date(2026, 10, 11)), date(2026, 10, 25))  # before the start too
+
+    def test_labels(self):
+        self.assertEqual(self.fixed('5').repeat_label, 'Every Sat')
+        self.assertEqual(self.fixed('024').repeat_label, 'Every Mon, Wed, Fri')
+        self.assertEqual(self.fixed('6', every_weeks=2).repeat_label, 'Every 2 weeks on Sun')
+        self.assertFalse(self.fixed('5').is_one_off)
+
+    def test_first_due_on_or_after_start(self):
+        self.fixed(str(self.today.weekday()))
+        [chore] = generate_due_chores()
+        self.assertEqual(chore.due_date, self.today)
+
+    def test_late_or_early_completion_never_repeats_a_day(self):
+        late = self.fixed(str((self.today - timedelta(days=1)).weekday()))
+        Chore.objects.create(template=late, due_date=self.today - timedelta(days=1))
+        complete_chore(late.chores.get(), self.user)  # a day late
+        self.assertEqual(late.chores.get(completed_at__isnull=True).due_date, self.today + timedelta(days=6))
+
+        early = make_template(title='Early', every_days=None, weekdays=str((self.today + timedelta(days=2)).weekday()),
+                              start_date=self.today)
+        Chore.objects.create(template=early, due_date=self.today + timedelta(days=2))
+        skip_chore(early.chores.get(), self.user)  # two days early
+        self.assertEqual(early.chores.get(completed_at__isnull=True).due_date, self.today + timedelta(days=9))
+
+    def test_calendar_projections(self):
+        self.fixed(str(self.today.weekday()))
+        generate_due_chores()
+        entries = calendar_entries(self.today, self.today + timedelta(days=14))
+        days = sorted(day for day, items in entries.items() for _, t, _, _ in items if t.title == 'Mow lawn')
+        self.assertEqual(days, [self.today, self.today + timedelta(days=7), self.today + timedelta(days=14)])
+
+    def test_switching_on_goes_to_next_matching_day(self):
+        template = self.fixed(str((self.today - timedelta(days=2)).weekday()))
+        Chore.objects.create(template=template, due_date=self.today - timedelta(days=9),
+                             completed_at=timezone.now() - timedelta(days=9))
+        remove_template(template)
+        enable_template(template)
+        self.assertEqual(template.chores.get(completed_at__isnull=True).due_date, self.today + timedelta(days=5))
+
+    def test_create_through_form(self):
+        response = self.client.post(reverse('chores:new_task'), {
+            'title': 'Mow lawn', 'area': 'Yard', 'done_when': 'Grass cut', 'estimated_minutes': 45,
+            'repeat': 'weekdays', 'weekdays': ['5'], 'every_weeks': 2, 'start_date': self.today.isoformat(),
+        })
+        self.assertRedirects(response, reverse('chores:dashboard'))
+        template = ChoreTemplate.objects.get(title='Mow lawn')
+        self.assertEqual((template.weekdays, template.every_weeks, template.every_days), ('5', 2, None))
+        expected = self.today if self.today.weekday() == 5 else next_weekday(self.today, 5)
+        self.assertEqual(template.chores.get().due_date, expected)
+
+    def test_form_needs_a_day(self):
+        response = self.client.post(reverse('chores:new_task'), {
+            'title': 'Mow lawn', 'done_when': 'Grass cut', 'estimated_minutes': 45,
+            'repeat': 'weekdays', 'every_weeks': 1, 'start_date': self.today.isoformat(),
+        })
+        self.assertContains(response, 'Pick at least one day.')
+        self.assertFalse(ChoreTemplate.objects.exists())
+
+    def test_edit_to_weekdays_reschedules_and_prefills(self):
+        template = make_template(title='Vacuum', every_days=7)
+        [first] = generate_due_chores()
+        close(first, days_ago=3)
+        [chore] = generate_due_chores()
+        url = reverse('chores:edit_task', args=[template.pk])
+        self.client.post(url, {
+            'title': 'Vacuum', 'done_when': 'Floors clean', 'estimated_minutes': 30, 'repeat': 'weekdays',
+            'weekdays': ['5'], 'every_weeks': 1, 'start_date': chore.due_date.isoformat(),
+        })
+        chore.refresh_from_db()
+        self.assertEqual(chore.due_date, next_weekday(self.today, 5))
+        form = self.client.get(url).context['form']
+        self.assertEqual((form['repeat'].value(), form['weekdays'].value()), ('weekdays', ['5']))

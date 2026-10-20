@@ -28,9 +28,9 @@ The goal is to generate SMART (Specific, Measurable, Assignable, Realistic, Time
   - estimated minutes
   - a first due date
   - who to assign it to
-  - how it repeats: **Once** (one-off), **Daily**, **Weekly**, **Monthly** (every 30 days) or **Custom** (every N days)
+  - how it repeats: **Once** (one-off), **Daily**, **Weekly**, **Monthly** (every 30 days), **Custom** (every N days) or **Weekdays** (on chosen days of the week, every week or every N weeks, e.g. every Saturday, or every other Sunday)
 
-  Repeats count from when the last one was done. A one-off disappears once it's done.
+  Repeats count from when the last one was done, except Weekdays: those are due on the next chosen day after the later of the due date and the day it was done, so doing one late or early never makes it due again straight away. With every N weeks, the first due date decides which weeks count (weeks start on Monday). A one-off disappears once it's done.
 - **Chores list.** ☰ → Chores lists every chore by area, with how often it repeats and an on/off switch. Switch off what doesn't apply to your home (no lawn, no stairs…); its history is kept. Switching a chore back on schedules it from today, so it never comes back overdue. Tap a chore to edit it, or use **New Task** to add your own. Bin chores are switched on and off on the pickup schedule instead.
 - **Changing chores.** Each chore on the dashboard has a ⋮ menu:
   - **Skip This One** closes it without marking it done. The next one is due the repeat interval after today, or on the next pickup for bins. One-off chores can't be skipped.

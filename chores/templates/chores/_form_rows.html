@@ -1,6 +1,6 @@
 {% comment %}
   Renders a form's fields as Adwaita-style rows inside a .boxed-list.
-  Radio choices become linked toggles, checkboxes become switches, text-like
+  Radio and multiple-checkbox choices become linked toggles, checkboxes become switches, text-like
   inputs stack under their label, and other inputs sit in the row suffix.
 {% endcomment %}
 {% if form.non_field_errors %}<li class="row error">{{ form.non_field_errors|join:" " }}</li>{% endif %}
@@ -18,7 +18,7 @@
     {% else %}
       <li class="row row-wrap field-{{ field.name }}">
         <div class="row-content">
-          {% if kind == "radioselect" %}
+          {% if kind == "radioselect" or kind == "checkboxselectmultiple" %}
             <div id="{{ field.auto_id }}-label">{{ field.label }}</div>
           {% else %}
             <label for="{{ field.id_for_label }}">{{ field.label }}</label>
@@ -27,8 +27,8 @@
           {{ field.errors }}
         </div>
         <div class="suffix">
-          {% if kind == "radioselect" %}
-            <div class="linked" role="radiogroup" aria-labelledby="{{ field.auto_id }}-label">
+          {% if kind == "radioselect" or kind == "checkboxselectmultiple" %}
+            <div class="linked" role="{% if kind == "radioselect" %}radiogroup{% else %}group{% endif %}" aria-labelledby="{{ field.auto_id }}-label">
               {% for choice in field %}<label class="button toggle">{{ choice.tag }}{{ choice.choice_label }}</label>{% endfor %}
             </div>
           {% elif kind == "checkbox" %}

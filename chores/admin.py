@@ -5,7 +5,7 @@ from .models import Chore, ChoreTemplate, NotificationLog, PickupSchedule
 
 @admin.register(ChoreTemplate)
 class ChoreTemplateAdmin(admin.ModelAdmin):
-    list_display = ['title', 'area', 'every_days', 'estimated_minutes', 'default_assignee', 'active']
+    list_display = ['title', 'area', 'every_days', 'weekdays', 'every_weeks', 'estimated_minutes', 'default_assignee', 'active']
     list_filter = ['active', 'area', 'default_assignee']
     search_fields = ['title', 'area', 'done_when']
 

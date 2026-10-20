@@ -47,19 +47,35 @@ def _rule_due_date(template, schedule, today):
         # an early or late completion never re-schedules the same pickup.
         after = max(last.due_date, timezone.localdate(last.completed_at)) + timedelta(days=1)
         return schedule.next_due_date(after)
+    start = max(today, template.start_date) if template.start_date else today
+    if template.is_fixed_days:
+        if last is None:
+            return template.next_fixed_day(start - timedelta(days=1))
+        # Like pickups: never land on the day just done or the one it was due.
+        return template.next_fixed_day(max(last.due_date, timezone.localdate(last.completed_at)))
     if last is None:
-        return max(today, template.start_date) if template.start_date else today
+        return start
     if template.is_one_off:
         return None
     return timezone.localdate(last.completed_at) + timedelta(days=template.every_days)
 
 
+def not_before_today(template, due, today):
+    """A due date moved up to today if it's in the past; fixed-day chores go to their next day from today."""
+    if due >= today:
+        return due
+    if template.is_fixed_days:
+        return template.next_fixed_day(today - timedelta(days=1))
+    return today
+
+
 def next_due_date(template, today):
     """Due date for a template's next chore, or None if there is no next one.
 
-    Pickup templates follow their PickupSchedule. Others are due on today (or
-    start_date, if later) when never completed, otherwise every_days after the
-    last completion or skip. A completed one-off has no next chore. Dates that
+    Pickup templates follow their PickupSchedule, and fixed-day templates their
+    weekdays (the first one after the later of the last due date and the day it
+    was closed). Others are due on today (or start_date, if later) when never
+    completed, otherwise every_days after the last completion or skip. A completed one-off has no next chore. Dates that
     fall in an away period are moved out of it (see shift_out_of_away).
     """
     schedule = PickupSchedule.objects.filter(template=template).first()
@@ -196,11 +212,13 @@ def active_pickup_schedules():
     }
 
 
-def create_task(*, title, area, done_when, estimated_minutes, every_days, start_date, assignee):
-    """Create a custom chore template (every_days=None for one-off) and its first chore."""
+def create_task(*, title, area, done_when, estimated_minutes, every_days, start_date, assignee,
+                weekdays='', every_weeks=1):
+    """Create a custom chore template (every_days=None and no weekdays for one-off) and its first chore."""
     template = ChoreTemplate.objects.create(
         title=title, area=area, done_when=done_when, estimated_minutes=estimated_minutes,
-        every_days=every_days, start_date=start_date, default_assignee=assignee,
+        every_days=every_days, weekdays=weekdays, every_weeks=every_weeks, start_date=start_date,
+        default_assignee=assignee,
     )
     generate_due_chores()
     return template
@@ -208,22 +226,27 @@ def create_task(*, title, area, done_when, estimated_minutes, every_days, start_
 
 @transaction.atomic
 def update_template(template, *, title, area, done_when, estimated_minutes, assignee,
-                    every_days=None, due_date=None, today=None):
+                    every_days=None, weekdays='', every_weeks=1, due_date=None, today=None):
     """Save edits to a chore and bring its open chore in line.
 
-    A new due_date moves the open chore by hand. Otherwise a new every_days
-    reschedules it from the last completion, but never into the past, and not
-    if it was moved by hand. Pickup templates ignore every_days and due_date.
-    A new assignee becomes the default and takes over the open chore.
+    A new due_date moves the open chore by hand. Otherwise a new repeat rule
+    (every_days, weekdays or every_weeks) reschedules it from the last
+    completion, but never into the past, and not if it was moved by hand. A new
+    fixed-day rule counts its weeks from due_date (or today). Pickup templates
+    ignore the repeat fields and due_date. A new assignee becomes the default
+    and takes over the open chore.
     """
     today = today or timezone.localdate()
     is_pickup = PickupSchedule.objects.filter(template=template).exists()
-    frequency_changed = not is_pickup and every_days != template.every_days
+    rule = (every_days, weekdays, every_weeks if weekdays else 1)
+    frequency_changed = not is_pickup and rule != (template.every_days, template.weekdays, template.every_weeks)
     assignee_changed = assignee != template.default_assignee
     template.title, template.area, template.done_when = title, area, done_when
     template.estimated_minutes, template.default_assignee = estimated_minutes, assignee
-    if not is_pickup:
-        template.every_days = every_days
+    if frequency_changed:
+        template.every_days, template.weekdays, template.every_weeks = rule
+        if weekdays:
+            template.start_date = due_date or today
     template.save()
 
     open_chore = template.chores.filter(completed_at__isnull=True).first()
@@ -236,7 +259,7 @@ def update_template(template, *, title, area, done_when, estimated_minutes, assi
         elif frequency_changed and not open_chore.moved_by_hand:
             due = next_due_date(template, today)
             if due is not None:
-                open_chore.due_date = max(due, today)
+                open_chore.due_date = not_before_today(template, due, today)
                 open_chore.save(update_fields=['due_date'])
     generate_due_chores(today)  # e.g. a finished one-off that now repeats
 
@@ -261,7 +284,7 @@ def enable_template(template, today=None):
     if due is None:  # a finished one-off
         return
     if due < today:
-        due = shift_out_of_away(today, None, away_periods(today))
+        due = shift_out_of_away(not_before_today(template, due, today), None, away_periods(today))
     Chore.objects.create(template=template, assignee=template.default_assignee, due_date=due)
 
 
@@ -289,6 +312,8 @@ def _projected_after(chore, schedule, today):
     template = chore.template
     if schedule is not None:
         return schedule.next_due_date(max(chore.due_date, today) + timedelta(days=1))
+    if template.is_fixed_days:
+        return template.next_fixed_day(max(chore.due_date, today))
     if template.is_one_off:
         return None
     return max(chore.due_date, today) + timedelta(days=template.every_days)
@@ -328,6 +353,8 @@ def calendar_entries(start, end, assignee=None, today=None):
             add(day, 'projected', chore.template, None, chore.template.default_assignee)
             if schedule is not None:
                 day = schedule.next_due_date(day + timedelta(days=1))
+            elif chore.template.is_fixed_days:
+                day = chore.template.next_fixed_day(day)
             else:
                 day += timedelta(days=chore.template.every_days)
 

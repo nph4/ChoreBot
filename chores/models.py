@@ -8,7 +8,10 @@ class ChoreTemplate(models.Model):
     """A SMART chore definition that dated Chore instances are generated from.
 
     every_days=None makes it a one-off: one chore is generated and, once completed, no more.
+    weekdays makes it repeat on fixed days of the week instead (every_days is then None).
     """
+
+    WEEKDAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
     title = models.CharField(max_length=200)
     area = models.CharField(max_length=100, blank=True)
@@ -17,6 +20,12 @@ class ChoreTemplate(models.Model):
     )
     estimated_minutes = models.PositiveSmallIntegerField(default=10)
     every_days = models.PositiveSmallIntegerField(default=7, null=True, blank=True)
+    weekdays = models.CharField(
+        max_length=7, blank=True, help_text='Fixed days as digits, Mon=0 … Sun=6, e.g. "5" for Saturdays.'
+    )
+    every_weeks = models.PositiveSmallIntegerField(
+        default=1, help_text='With weekdays: every this many weeks, counted from the week of start_date.'
+    )
     start_date = models.DateField(null=True, blank=True, help_text='First occurrence is due no earlier than this.')
     default_assignee = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+'
@@ -30,6 +39,7 @@ class ChoreTemplate(models.Model):
                 condition=models.Q(every_days__gte=1) | models.Q(every_days__isnull=True),
                 name='every_days_at_least_1',
             ),
+            models.CheckConstraint(condition=models.Q(every_weeks__gte=1), name='template_every_weeks_at_least_1'),
         ]
 
     def __str__(self):
@@ -37,12 +47,35 @@ class ChoreTemplate(models.Model):
 
     @property
     def is_one_off(self):
-        return self.every_days is None
+        return self.every_days is None and not self.weekdays
+
+    @property
+    def is_fixed_days(self):
+        return bool(self.weekdays)
 
     @property
     def repeat_label(self):
+        if self.weekdays:
+            days = ', '.join(self.WEEKDAY_NAMES[int(d)] for d in self.weekdays)
+            return f'Every {days}' if self.every_weeks == 1 else f'Every {self.every_weeks} weeks on {days}'
         names = {None: 'Once', 1: 'Daily', 7: 'Weekly', 30: 'Monthly'}
         return names.get(self.every_days, f'Every {self.every_days} days')
+
+    def next_fixed_day(self, after):
+        """First date strictly after `after` that falls on one of the weekdays, in a week that counts.
+
+        Weeks start on Monday. With every_weeks > 1, the weeks that count are those a
+        whole number of every_weeks after the week of start_date.
+        """
+        anchor = self.start_date or after
+        anchor_monday = anchor - timedelta(days=anchor.weekday())
+        day = after + timedelta(days=1)
+        for _ in range(7 * self.every_weeks):
+            weeks = (day - anchor_monday).days // 7
+            if str(day.weekday()) in self.weekdays and weeks % self.every_weeks == 0:
+                return day
+            day += timedelta(days=1)
+        raise ValueError(f'No weekday set on {self!r}')
 
 
 class Chore(models.Model):

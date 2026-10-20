@@ -4,7 +4,8 @@
 {% block headerbar_title %}{% if template %}Edit Chore{% else %}New Task{% endif %}{% endblock %}
 
 {% block extra_style %}
-  #task-form .boxed-list:not(:has(input[name="repeat"][value="custom"]:checked)) .field-every_days { display: none; }
+  #task-form .boxed-list:not(:has(input[name="repeat"][value="custom"]:checked)) .field-every_days,
+  #task-form .boxed-list:not(:has(input[name="repeat"][value="weekdays"]:checked)) :is(.field-weekdays, .field-every_weeks) { display: none; }
 {% endblock %}
 
 {% block content %}

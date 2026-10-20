@@ -3,6 +3,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import UserCreationForm
 from django.utils import timezone
 
+from .models import ChoreTemplate
+
 YES_NO = [('yes', 'Yes'), ('no', 'No')]
 WEEKLY, EVERY_OTHER_WEEK, CUSTOM = 'weekly', 'every_other_week', 'custom'
 
@@ -86,12 +88,25 @@ class TaskForm(forms.Form):
     done_when = forms.CharField(max_length=300, label='Done when', help_text='What "done" looks like.')
     estimated_minutes = forms.IntegerField(label='Minutes', min_value=1, max_value=600, initial=15)
     repeat = forms.ChoiceField(
-        choices=[('once', 'Once'), ('daily', 'Daily'), ('weekly', 'Weekly'), ('monthly', 'Monthly'), ('custom', 'Custom')],
+        choices=[
+            ('once', 'Once'), ('daily', 'Daily'), ('weekly', 'Weekly'), ('monthly', 'Monthly'),
+            ('custom', 'Custom'), ('weekdays', 'Weekdays'),
+        ],
         widget=forms.RadioSelect,
         initial='once',
-        help_text='Repeats count from when the last one was done. Monthly means every 30 days.',
+        help_text='Counted from when the last one was done, except Weekdays. Monthly is every 30 days.',
     )
     every_days = forms.IntegerField(label='Every how many days?', min_value=1, max_value=365, required=False)
+    weekdays = forms.MultipleChoiceField(
+        label='On',
+        choices=[(str(i), name) for i, name in enumerate(ChoreTemplate.WEEKDAY_NAMES)],
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+    )
+    every_weeks = forms.IntegerField(
+        label='Every how many weeks?', min_value=1, max_value=52, initial=1, required=False,
+        help_text='2 means every other week, counting from the due date.',
+    )
     start_date = forms.DateField(label='Due', widget=forms.DateInput(attrs={'type': 'date'}))
     assignee = forms.ModelChoiceField(
         queryset=get_user_model().objects.filter(is_active=True).order_by('username'),
@@ -114,6 +129,13 @@ class TaskForm(forms.Form):
                 self.add_error('every_days', 'Enter how many days apart it repeats.')
         else:
             cleaned['every_days'] = REPEAT_DAYS.get(repeat)
+        if repeat == 'weekdays':
+            if not cleaned.get('weekdays'):
+                self.add_error('weekdays', 'Pick at least one day.')
+            cleaned['weekdays'] = ''.join(sorted(cleaned.get('weekdays') or []))
+            cleaned['every_weeks'] = cleaned.get('every_weeks') or 1
+        else:
+            cleaned['weekdays'], cleaned['every_weeks'] = '', 1
         return cleaned
 
     def task_fields(self):
@@ -122,6 +144,7 @@ class TaskForm(forms.Form):
         return {
             'title': c['title'], 'area': c['area'], 'done_when': c['done_when'],
             'estimated_minutes': c['estimated_minutes'], 'every_days': c['every_days'],
+            'weekdays': c['weekdays'], 'every_weeks': c['every_weeks'],
             'start_date': c['start_date'], 'assignee': c['assignee'],
         }
 
@@ -131,11 +154,15 @@ class EditTaskForm(TaskForm):
 
     def __init__(self, *args, template, open_chore, is_pickup, **kwargs):
         every_days = template.every_days
-        repeat = next((key for key, days in REPEAT_DAYS.items() if days == every_days), 'custom')
+        if template.weekdays:
+            repeat = 'weekdays'
+        else:
+            repeat = next((key for key, days in REPEAT_DAYS.items() if days == every_days), 'custom')
         kwargs['initial'] = {
             'title': template.title, 'area': template.area, 'done_when': template.done_when,
             'estimated_minutes': template.estimated_minutes, 'assignee': template.default_assignee,
             'repeat': repeat, 'every_days': every_days if repeat == 'custom' else None,
+            'weekdays': list(template.weekdays), 'every_weeks': template.every_weeks,
             'start_date': open_chore.due_date if open_chore else None,
         }
         super().__init__(*args, **kwargs)
@@ -145,7 +172,8 @@ class EditTaskForm(TaskForm):
         if is_pickup or open_chore is None:
             del self.fields['start_date']
         if is_pickup:
-            del self.fields['repeat'], self.fields['every_days']
+            for name in ('repeat', 'every_days', 'weekdays', 'every_weeks'):
+                del self.fields[name]
 
     def update_fields(self):
         """Keyword arguments for services.update_template."""
@@ -153,7 +181,8 @@ class EditTaskForm(TaskForm):
         return {
             'title': c['title'], 'area': c['area'], 'done_when': c['done_when'],
             'estimated_minutes': c['estimated_minutes'], 'assignee': c['assignee'],
-            'every_days': c.get('every_days'), 'due_date': c.get('start_date'),
+            'every_days': c.get('every_days'), 'weekdays': c.get('weekdays', ''),
+            'every_weeks': c.get('every_weeks', 1), 'due_date': c.get('start_date'),
         }
 
 
