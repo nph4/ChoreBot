@@ -31,10 +31,11 @@ The goal is to generate SMART (Specific, Measurable, Assignable, Realistic, Time
   - how it repeats: **Once** (one-off), **Daily**, **Weekly**, **Monthly** (every 30 days) or **Custom** (every N days)
 
   Repeats count from when the last one was done. A one-off disappears once it's done.
+- **Chores list.** ☰ → Chores lists every chore by area, with how often it repeats and an on/off switch. Switch off what doesn't apply to your home (no lawn, no stairs…); its history is kept. Switching a chore back on schedules it from today, so it never comes back overdue. Tap a chore to edit it, or use **New Task** to add your own. Bin chores are switched on and off on the pickup schedule instead.
 - **Changing chores.** Each chore on the dashboard has a ⋮ menu:
   - **Skip This One** closes it without marking it done. The next one is due the repeat interval after today, or on the next pickup for bins. One-off chores can't be skipped.
   - **Move To** sets this one's due date. Only this occurrence moves.
-  - **Edit Chore…** changes the title, area, "done when", minutes, repeat, next due date and default assignee. Changing how often it repeats reschedules the open chore from the last time it was done, but never into the past, and leaves a date you moved by hand alone. Bin chores take their dates from the pickup schedule instead. **Remove Chore** stops a chore repeating; its history stays, and the admin can turn it back on.
+  - **Edit Chore…** changes the title, area, "done when", minutes, repeat, next due date and default assignee. Changing how often it repeats reschedules the open chore from the last time it was done, but never into the past, and leaves a date you moved by hand alone. Bin chores take their dates from the pickup schedule instead. **Turn Off** does the same as the switch on the Chores page.
 - **Away dates.** ☰ → Away records days nobody is home. While away, no notifications are sent, bin pickups that fall in the range are skipped, and other chores due in it move to the day you get back. Chores that were already overdue stay as they are, and removing away dates doesn't move chores back. The calendar shades away days and the dashboard shows a banner.
 - **Garbage, recycling and compost pickup.** Many cities don't collect every bin every week. Portland, OR, for example, collects recycling and compost weekly and garbage every other week. The pickup setup page asks:
   1. Are all bins picked up on the same schedule and day? If yes, you enter one schedule for all of them. If no, you enter a schedule for each bin.

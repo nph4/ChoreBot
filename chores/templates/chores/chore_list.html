@@ -1,0 +1,23 @@
+{% extends "chores/base.html" %}
+
+{% block title %}Chores · ChoreBot{% endblock %}
+{% block headerbar_title %}Chores{% endblock %}
+
+{% block extra_style %}
+  .top-actions { display: flex; justify-content: center; margin-bottom: 24px; }
+{% endblock %}
+
+{% block content %}
+  <div class="top-actions">
+    <a class="button suggested pill" href="{% url 'chores:new_task' %}">New Task</a>
+  </div>
+  {% for area, templates in areas %}
+    <section class="group">
+      <h2 class="heading">{{ area }}</h2>
+      <ul class="boxed-list">{% for template in templates %}{% include "chores/_template_row.html" %}{% endfor %}</ul>
+    </section>
+  {% empty %}
+    <p class="dim">No chores yet.</p>
+  {% endfor %}
+  <p class="dim caption">Turning a chore off removes it from Today and the calendar but keeps its history. Turning it back on schedules it from today.</p>
+{% endblock %}

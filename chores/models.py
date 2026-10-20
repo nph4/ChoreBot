@@ -39,6 +39,11 @@ class ChoreTemplate(models.Model):
     def is_one_off(self):
         return self.every_days is None
 
+    @property
+    def repeat_label(self):
+        names = {None: 'Once', 1: 'Daily', 7: 'Weekly', 30: 'Monthly'}
+        return names.get(self.every_days, f'Every {self.every_days} days')
+
 
 class Chore(models.Model):
     """One dated occurrence of a ChoreTemplate."""

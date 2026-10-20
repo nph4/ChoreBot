@@ -16,6 +16,8 @@ urlpatterns = [
     path('away/<int:pk>/delete/', views.delete_away, name='delete_away'),
     path('pickup/', views.pickup_setup, name='pickup_setup'),
     path('calendar/', views.calendar_view, name='calendar'),
+    path('tasks/', views.chore_list, name='chore_list'),
     path('tasks/new/', views.new_task, name='new_task'),
+    path('tasks/<int:pk>/active/', views.set_active, name='set_active'),
     path('users/new/', views.new_user, name='new_user'),
 ]

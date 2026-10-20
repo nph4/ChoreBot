@@ -10,8 +10,8 @@ from django.utils import timezone
 from .models import AwayPeriod, Chore, ChoreTemplate, NotificationLog, PickupSchedule
 from .notifications import send, send_due_notification
 from .services import (
-    add_away_period, calendar_entries, complete_chore, generate_due_chores, next_due_date, save_pickup_schedules,
-    skip_chore, update_template,
+    add_away_period, calendar_entries, complete_chore, enable_template, generate_due_chores, next_due_date,
+    remove_template, save_pickup_schedules, skip_chore, update_template,
 )
 
 
@@ -656,7 +656,7 @@ class EditTaskTests(TestCase):
         self.assertEqual(self.client.post(reverse('chores:remove_task', args=[bins.pk])).status_code, 400)
 
     def test_remove_keeps_history(self):
-        self.assertRedirects(self.client.post(reverse('chores:remove_task', args=[self.template.pk])), reverse('chores:dashboard'))
+        self.assertRedirects(self.client.post(reverse('chores:remove_task', args=[self.template.pk])), reverse('chores:chore_list'))
         self.template.refresh_from_db()
         self.assertFalse(self.template.active)
         self.assertEqual(self.template.chores.count(), 1)  # the done one
@@ -729,3 +729,79 @@ class AwayTests(TestCase):
         self.assertNotContains(self.client.get(reverse('chores:dashboard')), 'Away until')
         AwayPeriod.objects.create(start=self.today, end=self.end)
         self.assertContains(self.client.get(reverse('chores:dashboard')), 'Away until')
+
+
+class ChoreListTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('alex', password='pw')
+        self.client.force_login(self.user)
+        self.today = timezone.localdate()
+        self.url = reverse('chores:chore_list')
+
+    def toggle(self, template, active, htmx=False):
+        headers = {'HX-Request': 'true'} if htmx else {}
+        return self.client.post(reverse('chores:set_active', args=[template.pk]), {'active': '1' if active else '0'}, headers=headers)
+
+    def test_grouped_by_area_with_no_area_last(self):
+        make_template(title='Mow lawn', area='Yard', every_days=7)
+        make_template(title='Dishes', area='Kitchen', every_days=1)
+        make_template(title='Call plumber', area='', every_days=None)
+        response = self.client.get(self.url)
+        areas = [(area, [t.title for t in items]) for area, items in response.context['areas']]
+        self.assertEqual(areas, [('Kitchen', ['Dishes']), ('Yard', ['Mow lawn']), ('Other', ['Call plumber'])])
+        self.assertContains(response, 'Weekly')
+        self.assertContains(self.client.get(reverse('chores:dashboard')), self.url)
+
+    def test_turn_off_then_on_schedules_from_today(self):
+        mow = make_template(title='Mow lawn', area='Yard', every_days=7)
+        [chore] = generate_due_chores()
+        close(chore, days_ago=30)
+        generate_due_chores()
+        self.assertRedirects(self.toggle(mow, False), self.url)
+        mow.refresh_from_db()
+        self.assertFalse(mow.active)
+        self.assertFalse(mow.chores.filter(completed_at__isnull=True).exists())
+        self.toggle(mow, True)
+        mow.refresh_from_db()
+        self.assertTrue(mow.active)
+        self.assertEqual(mow.chores.get(completed_at__isnull=True).due_date, self.today)  # not 23 days overdue
+
+    def test_turn_on_keeps_future_date_and_respects_away(self):
+        mow = make_template(title='Mow lawn', every_days=7)
+        close(generate_due_chores()[0], days_ago=2)
+        remove_template(mow)
+        enable_template(mow)
+        self.assertEqual(mow.chores.get(completed_at__isnull=True).due_date, self.today + timedelta(days=5))
+
+        remove_template(mow)
+        AwayPeriod.objects.create(start=self.today - timedelta(days=1), end=self.today + timedelta(days=6))
+        enable_template(mow)
+        self.assertEqual(mow.chores.get(completed_at__isnull=True).due_date, self.today + timedelta(days=7))
+
+    def test_htmx_returns_just_the_row(self):
+        mow = make_template(title='Mow lawn', every_days=7)
+        response = self.toggle(mow, False, htmx=True)
+        self.assertTemplateUsed(response, 'chores/_template_row.html')
+        self.assertContains(response, 'aria-checked="false"')
+        self.assertContains(response, f'id="template-{mow.pk}"')
+
+    def test_pickups_and_finished_one_offs_have_no_switch(self):
+        save_pickup_schedules({PickupSchedule.GARBAGE: (1, self.today + timedelta(days=2), False)})
+        bins = PickupSchedule.objects.get().template
+        gate = make_template(title='Fix gate', every_days=None)
+        generate_due_chores()
+        close(gate.chores.get(), days_ago=1)
+        response = self.client.get(self.url)
+        self.assertNotContains(response, reverse('chores:set_active', args=[bins.pk]))
+        self.assertNotContains(response, reverse('chores:set_active', args=[gate.pk]))
+        self.assertContains(response, 'Follows the pickup schedule')
+        self.assertEqual(self.toggle(bins, False).status_code, 400)
+        bins.refresh_from_db()
+        self.assertTrue(bins.active)
+
+    def test_turned_off_chore_can_still_be_edited(self):
+        mow = make_template(title='Mow lawn', every_days=7)
+        remove_template(mow)
+        response = self.client.get(reverse('chores:edit_task', args=[mow.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Turn Off')

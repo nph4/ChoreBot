@@ -1,6 +1,7 @@
 import calendar
 from datetime import date, timedelta
 from functools import wraps
+from itertools import groupby
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -9,6 +10,7 @@ from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.db.models import Exists, OuterRef
 from django.utils import formats, timezone
 from django.views.decorators.http import require_POST
 
@@ -16,7 +18,8 @@ from .forms import AssignForm, AwayForm, EditTaskForm, MoveForm, NewUserForm, Pi
 from .models import AwayPeriod, Chore, ChoreTemplate, PickupSchedule
 from .services import (
     active_pickup_schedules, add_away_period, assign_chore, calendar_entries, complete_chore, create_task,
-    generate_due_chores, move_chore, remove_template, save_pickup_schedules, skip_chore, update_template,
+    enable_template, generate_due_chores, move_chore, remove_template, save_pickup_schedules, skip_chore,
+    update_template,
 )
 
 UPCOMING_DAYS = 7
@@ -99,9 +102,45 @@ def move(request, pk):
     return _lists_response(request)
 
 
+def _template_rows():
+    """Every chore template, annotated for the Chores page: is_pickup, has_open, finished (done one-off)."""
+    templates = ChoreTemplate.objects.select_related('default_assignee').annotate(
+        is_pickup=Exists(PickupSchedule.objects.filter(template=OuterRef('pk'))),
+        has_open=Exists(Chore.objects.filter(template=OuterRef('pk'), completed_at__isnull=True)),
+        has_closed=Exists(Chore.objects.filter(template=OuterRef('pk'), completed_at__isnull=False)),
+    )
+    for template in templates:
+        template.finished = template.is_one_off and template.active and template.has_closed and not template.has_open
+    return templates
+
+
+@login_required
+def chore_list(request):
+    """All chores by area, each with an on/off switch."""
+    rows = sorted(_template_rows(), key=lambda t: (not t.area, t.area.lower(), t.title.lower()))
+    return render(request, 'chores/chore_list.html', {
+        'areas': [(area or 'Other', list(items)) for area, items in groupby(rows, key=lambda t: t.area)],
+    })
+
+
+@login_required
+@require_POST
+def set_active(request, pk):
+    template = get_object_or_404(ChoreTemplate, pk=pk)
+    if PickupSchedule.objects.filter(template=template).exists():
+        return HttpResponseBadRequest('Bins are turned on and off on the pickup schedule.')
+    if request.POST.get('active') == '1':
+        enable_template(template)
+    else:
+        remove_template(template)
+    if request.headers.get('HX-Request'):
+        return render(request, 'chores/_template_row.html', {'template': _template_rows().get(pk=pk)})
+    return redirect('chores:chore_list')
+
+
 @login_required
 def edit_template(request, pk):
-    template = get_object_or_404(ChoreTemplate, pk=pk, active=True)
+    template = get_object_or_404(ChoreTemplate, pk=pk)
     open_chore = template.chores.filter(completed_at__isnull=True).first()
     is_pickup = PickupSchedule.objects.filter(template=template).exists()
     form = EditTaskForm(request.POST or None, template=template, open_chore=open_chore, is_pickup=is_pickup)
@@ -119,8 +158,8 @@ def remove(request, pk):
     if PickupSchedule.objects.filter(template=template).exists():
         return HttpResponseBadRequest('Remove a bin from the pickup schedule instead.')
     remove_template(template)
-    messages.success(request, f'“{template.title}” removed')
-    return redirect('chores:dashboard')
+    messages.success(request, f'“{template.title}” turned off. Turn it back on from Chores.')
+    return redirect('chores:chore_list')
 
 
 @login_required

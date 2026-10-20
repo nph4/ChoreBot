@@ -32,10 +32,10 @@
       <button type="submit" class="button suggested pill">{% if template %}Save{% else %}Create Task{% endif %}</button>
     </div>
   </form>
-  {% if template and not is_pickup %}
+  {% if template and template.active and not is_pickup %}
     <form method="post" action="{% url 'chores:remove_task' template.pk %}" class="actions">
       {% csrf_token %}
-      <button type="submit" class="button destructive pill">Remove Chore</button>
+      <button type="submit" class="button destructive pill">Turn Off</button>
     </form>
   {% endif %}
 {% endblock %}

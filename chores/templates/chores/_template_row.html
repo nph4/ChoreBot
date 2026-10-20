@@ -1,0 +1,22 @@
+<li class="row" id="template-{{ template.pk }}">
+  <a class="row-content" href="{% url 'chores:edit_task' template.pk %}">
+    <div>{{ template.title }}</div>
+    <div class="row-subtitle">
+      {% if template.is_pickup %}Follows the pickup schedule{% else %}{{ template.repeat_label }}{% endif %}
+      · ~{{ template.estimated_minutes }} min{% if template.default_assignee %} · {{ template.default_assignee.get_username }}{% endif %}
+    </div>
+  </a>
+  {% if template.is_pickup %}
+    <a class="button flat" href="{% url 'chores:pickup_setup' %}">Pickup Schedule</a>
+  {% elif template.finished %}
+    <span class="dim">Done</span>
+  {% else %}
+    <form method="post" action="{% url 'chores:set_active' template.pk %}"
+          hx-post="{% url 'chores:set_active' template.pk %}" hx-target="#template-{{ template.pk }}" hx-swap="outerHTML">
+      {% csrf_token %}
+      <input type="hidden" name="active" value="{% if template.active %}0{% else %}1{% endif %}">
+      <button type="submit" role="switch" aria-checked="{% if template.active %}true{% else %}false{% endif %}"
+              aria-label="{{ template.title }}" title="{% if template.active %}Turn Off{% else %}Turn On{% endif %}"></button>
+    </form>
+  {% endif %}
+</li>

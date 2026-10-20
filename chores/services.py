@@ -219,10 +219,26 @@ def update_template(template, *, title, area, done_when, estimated_minutes, assi
 
 @transaction.atomic
 def remove_template(template):
-    """Stop a chore repeating: deactivate it and drop its open chore. History is kept."""
+    """Turn a chore off: deactivate it and drop its open chore. History is kept."""
     template.chores.filter(completed_at__isnull=True).delete()
     template.active = False
     template.save(update_fields=['active'])
+
+
+@transaction.atomic
+def enable_template(template, today=None):
+    """Turn a chore back on. Its next one is due from today, so it never returns overdue."""
+    today = today or timezone.localdate()
+    template.active = True
+    template.save(update_fields=['active'])
+    if template.chores.filter(completed_at__isnull=True).exists():
+        return
+    due = next_due_date(template, today)
+    if due is None:  # a finished one-off
+        return
+    if due < today:
+        due = shift_out_of_away(today, None, away_periods(today))
+    Chore.objects.create(template=template, assignee=template.default_assignee, due_date=due)
 
 
 @transaction.atomic
