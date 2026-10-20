@@ -51,7 +51,7 @@ The goal is to generate SMART (Specific, Measurable, Assignable, Realistic, Time
 
 ## Architecture
 
-- Django 6.1 app (Python 3.13), with server-rendered templates and [htmx](https://htmx.org/). htmx comes from unpkg. The [Inter](https://rsms.me/inter/) font (v4.1, SIL Open Font License) is bundled in `chores/static/chores/fonts/`. There's no frontend build step.
+- Django 6.1 app (Python 3.13), with server-rendered templates and [htmx](https://htmx.org/). htmx comes from unpkg. GNOME's [Adwaita Sans](https://gitlab.gnome.org/GNOME/adwaita-fonts) font (51.0, SIL Open Font License) is bundled in `chores/static/chores/fonts/`, converted to WOFF2. There's no frontend build step.
 - PostgreSQL 17 database.
 - Both run in Docker containers via Docker Compose.
 

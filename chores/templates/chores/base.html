@@ -9,17 +9,17 @@
     try { if (localStorage.getItem('theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) {}
   </script>
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
-  <link rel="preload" href="{% static 'chores/fonts/InterVariable.woff2' %}" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{% static 'chores/fonts/AdwaitaSans-Regular.woff2' %}" as="font" type="font/woff2" crossorigin>
   <style>
     /* Colors: Nord palette (https://www.nordtheme.com/docs/colors-and-palettes).
        Layout and widgets: GNOME / libadwaita conventions (header bar, boxed lists, pills, popovers). */
-    /* Inter v4.1 (SIL Open Font License; see static/chores/fonts/Inter-LICENSE.txt). */
+    /* Adwaita Sans 51.0, GNOME's UI font (SIL Open Font License; see static/chores/fonts/AdwaitaSans-LICENSE.txt). */
     @font-face {
-      font-family: Inter;
+      font-family: "Adwaita Sans";
       font-style: normal;
       font-weight: 100 900;
       font-display: swap;
-      src: url("{% static 'chores/fonts/InterVariable.woff2' %}") format("woff2");
+      src: url("{% static 'chores/fonts/AdwaitaSans-Regular.woff2' %}") format("woff2");
     }
     :root[data-theme="dark"] {
       --bg: #2e3440; --headerbar: #3b4252; --card: #3b4252; --popover: #434c5e;
@@ -46,7 +46,7 @@
     * { box-sizing: border-box; }
     body {
       margin: 0; background: var(--bg); color: var(--fg);
-      font: 15px/1.45 Inter, "Adwaita Sans", system-ui, sans-serif;
+      font: 15px/1.45 "Adwaita Sans", system-ui, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
     a { color: var(--accent); }
