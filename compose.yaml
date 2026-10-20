@@ -25,5 +25,16 @@ services:
       db:
         condition: service_healthy
 
+  notifier:
+    build: .
+    command: python manage.py send_notifications --loop
+    init: true  # so docker compose stop doesn't wait out the timeout
+    env_file: .env
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pgdata:

@@ -106,3 +106,26 @@ class PickupSchedule(models.Model):
         """Earliest chore due date >= on_or_after, where due = pickup day (minus one for AM)."""
         lead = timedelta(days=1 if self.am_pickup else 0)
         return self.next_pickup_on_or_after(on_or_after + lead) - lead
+
+
+class NotificationLog(models.Model):
+    """One row per notification slot per day, so a digest is never sent twice."""
+
+    MORNING = 'morning'
+    EVENING = 'evening'
+    KIND_CHOICES = [(MORNING, 'Morning digest'), (EVENING, 'Evening nudge')]
+
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES)
+    date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    chore_count = models.PositiveSmallIntegerField(help_text='0 means there was nothing to send.')
+    delivered = models.BooleanField(help_text='Every destination accepted the message.')
+
+    class Meta:
+        ordering = ['-date', 'kind']
+        constraints = [
+            models.UniqueConstraint(fields=['kind', 'date'], name='one_notification_per_kind_per_day'),
+        ]
+
+    def __str__(self):
+        return f'{self.get_kind_display()} {self.date}'

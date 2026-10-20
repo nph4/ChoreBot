@@ -38,6 +38,7 @@ The goal is to generate SMART (Specific, Measurable, Assignable, Realistic, Time
 
   The dashboard prompts for this setup until it's done.
 - **Household members.** Any active user account can be assigned chores. Superusers can add members from ☰ → New User…; switch on **Administrator** to let that person create users and use the admin site too. Each chore on the dashboard has an **Assign** button (the person icon): pick a person (or Unassigned) and tick **Also future ones** to make them the default for that chore's later occurrences too, or leave it unticked to change only this one. The **Mine** filter shows chores assigned to you; **Everyone** shows all.
+- **Notifications.** A morning digest lists chores that are overdue or due today. An evening nudge lists whichever of them are still not done; AM-pickup bins are due the day before pickup, so they show up in that evening's nudge. Messages go to every destination in `NOTIFY_URLS`, for the whole household, and are skipped when nothing is due. Discord, Telegram, Signal and email all work through [Apprise](https://github.com/caronc/apprise); see [Notifications](#notifications).
 - **GNOME-style interface.** Follows Adwaita / GNOME design patterns:
   - a header bar with a main menu
   - toasts confirming actions
@@ -53,7 +54,8 @@ The goal is to generate SMART (Specific, Measurable, Assignable, Realistic, Time
 
 - Django 6.1 app (Python 3.13), with server-rendered templates and [htmx](https://htmx.org/), run by gunicorn with WhiteNoise for static files. htmx comes from unpkg. GNOME's [Adwaita Sans](https://gitlab.gnome.org/GNOME/adwaita-fonts) font (51.0, SIL Open Font License) is bundled in `chores/static/chores/fonts/`, converted to WOFF2. There's no frontend build step.
 - PostgreSQL 17 database.
-- Both run in Docker containers via Docker Compose.
+- A `notifier` service, from the same image, runs `manage.py send_notifications --loop` to send notifications on time.
+- All of these run in Docker containers via Docker Compose.
 
 | Path | Contents |
 |---|---|
@@ -80,6 +82,7 @@ docker compose exec web python manage.py test chores.tests.MarkDoneTests.test_ge
 docker compose exec web python manage.py makemigrations
 docker compose exec web python manage.py seed_templates     # no-op if any templates exist
 docker compose exec web python manage.py generate_chores    # create missing chores (the dashboard also does this)
+docker compose exec web python manage.py send_notifications --test   # send a test message to NOTIFY_URLS now
 ```
 
 ## Configuration
@@ -93,5 +96,22 @@ Settings come from environment variables in `.env` (see `.env.example`):
 | `DJANGO_ALLOWED_HOSTS` | Comma-separated host names |
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT` | Database connection |
 | `TIME_ZONE` | e.g. `America/Los_Angeles`. Decides what "today" is for due dates. |
+| `NOTIFY_URLS` | Where notifications go: one or more Apprise URLs, separated by spaces. Empty sends nothing. |
+| `NOTIFY_MORNING_AT`, `NOTIFY_EVENING_AT` | Local send times, default `08:00` and `19:00`. Leave one empty to turn that message off. |
 
 In development, Compose runs Django's development server with the repo mounted into the container, so code changes reload live. The image's default command is gunicorn, and with `DJANGO_DEBUG=0` static files (the bundled font, the admin's CSS) are served by [WhiteNoise](https://whitenoise.readthedocs.io/). The Dockerfile runs `collectstatic` at build time, which makes compressed copies with hashed file names that browsers can cache indefinitely, so rebuild the image after changing anything in `static/`.
+
+## Notifications
+
+Put one Apprise URL per destination in `NOTIFY_URLS`, separated by spaces, then recreate the notifier so it rereads `.env` (`docker compose up -d --force-recreate notifier`) and check with `send_notifications --test`.
+
+| Service | URL | Where the parts come from |
+|---|---|---|
+| Discord | `https://discord.com/api/webhooks/<id>/<token>` | Channel settings → Integrations → Webhooks → Copy Webhook URL. `discord://<id>/<token>` also works. |
+| Telegram | `tgram://<bot_token>/<chat_id>` | Create a bot with @BotFather, send it a message, then find your chat ID at `https://api.telegram.org/bot<bot_token>/getUpdates`. |
+| Email | `mailto://<user>:<password>@gmail.com?to=<address>` | Gmail needs an [app password](https://myaccount.google.com/apppasswords). Other providers: see Apprise's [email docs](https://github.com/caronc/apprise/wiki/Notify_email). |
+| Signal | `signal://<host>:8080/<+from>/<+to>` | Signal has no official API: this needs a separately run [signal-cli-rest-api](https://github.com/bbernhard/signal-cli-rest-api) container with its own registered (or linked) phone number. It isn't part of this Compose setup. |
+
+Escape characters with special meaning in URLs, such as `@` or `/` in a password, as `%40` or `%2F`.
+
+Each message is sent at most once a day. If the notifier is down at the morning time, the digest goes out when it comes back, unless the evening time has already passed. A message that fails at some destination isn't retried; the failure appears in `docker compose logs notifier`. Sent messages are listed in the admin under Notification logs.

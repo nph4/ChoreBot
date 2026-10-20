@@ -1,4 +1,5 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from unittest import mock
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -6,7 +7,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Chore, ChoreTemplate, PickupSchedule
+from .models import Chore, ChoreTemplate, NotificationLog, PickupSchedule
+from .notifications import send, send_due_notification
 from .services import complete_chore, generate_due_chores, next_due_date, save_pickup_schedules
 
 
@@ -434,3 +436,93 @@ class StaticFilesTests(TestCase):
         response = self.client.get('/static/chores/fonts/AdwaitaSans-Regular.woff2')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'font/woff2')
+
+
+@override_settings(NOTIFY_URLS=['json://localhost'], NOTIFY_MORNING_AT='08:00', NOTIFY_EVENING_AT='19:00')
+class NotificationTests(TestCase):
+    day = date(2026, 3, 10)
+
+    def at(self, hour, minute=0, day=None):
+        return timezone.make_aware(datetime.combine(day or self.day, datetime.min.time()).replace(hour=hour, minute=minute))
+
+    def setUp(self):
+        patcher = mock.patch('chores.notifications.send', return_value=True)
+        self.send = patcher.start()
+        self.addCleanup(patcher.stop)
+        self.user = get_user_model().objects.create_user('alex', password='pw')
+        self.dishes = make_template(title='Dishes', default_assignee=self.user)
+        self.vacuum = make_template(title='Vacuum', area='', estimated_minutes=20)
+
+    def test_nothing_before_morning_time(self):
+        self.assertIsNone(send_due_notification(self.at(7, 59)))
+        self.assertFalse(NotificationLog.objects.exists())
+
+    def test_morning_digest_sent_once_and_generates_chores(self):
+        log = send_due_notification(self.at(8))
+        self.assertEqual((log.kind, log.chore_count, log.delivered), (NotificationLog.MORNING, 2, True))
+        title, body = self.send.call_args.args
+        self.assertEqual(title, 'ChoreBot: 2 chores today')
+        self.assertIn('**Due today**', body)
+        self.assertIn('- Dishes (Kitchen, ~10 min) · alex', body)
+        self.assertIn('- Vacuum (~20 min) · unassigned', body)
+        self.assertNotIn('Overdue', body)
+        self.assertIsNone(send_due_notification(self.at(9)))
+        self.send.assert_called_once()
+
+    def test_overdue_listed_with_due_date_and_upcoming_left_out(self):
+        Chore.objects.create(template=self.dishes, assignee=self.user, due_date=self.day - timedelta(days=2))
+        Chore.objects.create(template=self.vacuum, due_date=self.day + timedelta(days=1))
+        send_due_notification(self.at(8))
+        title, body = self.send.call_args.args
+        self.assertEqual(title, 'ChoreBot: 1 chore today')
+        self.assertIn('**Overdue**\n- Dishes (Kitchen, ~10 min) · alex · due Sun 8 Mar', body)
+        self.assertNotIn('Vacuum', body)
+
+    def test_late_start_catches_up_morning_but_not_after_evening_time(self):
+        self.assertEqual(send_due_notification(self.at(10)).kind, NotificationLog.MORNING)
+        next_day = self.day + timedelta(days=1)
+        self.assertEqual(send_due_notification(self.at(19, 30, next_day)).kind, NotificationLog.EVENING)
+        self.assertFalse(NotificationLog.objects.filter(kind=NotificationLog.MORNING, date=next_day).exists())
+
+    def test_evening_nudge_lists_only_chores_still_open(self):
+        send_due_notification(self.at(8))
+        complete_chore(Chore.objects.get(template=self.dishes), self.user)
+        log = send_due_notification(self.at(19))
+        self.assertEqual((log.kind, log.chore_count), (NotificationLog.EVENING, 1))
+        title, body = self.send.call_args.args
+        self.assertEqual(title, 'ChoreBot: 1 chore still to do')
+        self.assertNotIn('Dishes', body)
+
+    def test_nothing_due_is_logged_but_not_sent(self):
+        ChoreTemplate.objects.update(active=False)
+        log = send_due_notification(self.at(8))
+        self.assertEqual(log.chore_count, 0)
+        self.send.assert_not_called()
+
+    def test_failed_send_is_not_retried(self):
+        self.send.return_value = False
+        self.assertFalse(send_due_notification(self.at(8)).delivered)
+        self.assertIsNone(send_due_notification(self.at(8, 1)))
+        self.send.assert_called_once()
+
+    @override_settings(NOTIFY_URLS=[])
+    def test_no_urls_means_no_notifications(self):
+        self.assertIsNone(send_due_notification(self.at(8)))
+        self.assertFalse(NotificationLog.objects.exists())
+
+    @override_settings(NOTIFY_EVENING_AT='')
+    def test_empty_time_turns_that_message_off(self):
+        self.assertEqual(send_due_notification(self.at(23)).kind, NotificationLog.MORNING)
+
+
+class AppriseSendTests(TestCase):
+    @override_settings(NOTIFY_URLS=['json://localhost'])
+    def test_sends_markdown_to_destinations(self):
+        with mock.patch('apprise.Apprise.notify', return_value=True) as notify:
+            self.assertTrue(send('Title', '**Body**'))
+        self.assertEqual(notify.call_args.kwargs['body_format'], 'markdown')
+
+    @override_settings(NOTIFY_URLS=['json://localhost', 'not-a-service://x'])
+    def test_unrecognised_url_counts_as_failure(self):
+        with mock.patch('apprise.Apprise.notify', return_value=True), self.assertLogs('chores.notifications', 'WARNING'):
+            self.assertFalse(send('Title', 'Body'))

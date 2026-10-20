@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Chore, ChoreTemplate, PickupSchedule
+from .models import Chore, ChoreTemplate, NotificationLog, PickupSchedule
 
 
 @admin.register(ChoreTemplate)
@@ -20,3 +20,9 @@ class ChoreAdmin(admin.ModelAdmin):
 @admin.register(PickupSchedule)
 class PickupScheduleAdmin(admin.ModelAdmin):
     list_display = ['stream', 'every_weeks', 'next_pickup', 'am_pickup', 'template']
+
+
+@admin.register(NotificationLog)
+class NotificationLogAdmin(admin.ModelAdmin):
+    list_display = ['date', 'kind', 'chore_count', 'delivered', 'created_at']
+    list_filter = ['kind', 'delivered']

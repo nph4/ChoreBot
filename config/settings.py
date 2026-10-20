@@ -136,6 +136,11 @@ STORAGES = {
     },
 }
 
+# Notifications: Apprise URLs (space-separated) and local send times; an empty time turns that message off.
+NOTIFY_URLS = os.environ.get('NOTIFY_URLS', '').split()
+NOTIFY_MORNING_AT = os.environ.get('NOTIFY_MORNING_AT', '08:00')
+NOTIFY_EVENING_AT = os.environ.get('NOTIFY_EVENING_AT', '19:00')
+
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'chores:dashboard'
 LOGOUT_REDIRECT_URL = 'login'

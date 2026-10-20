@@ -16,6 +16,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - `save_pickup_schedules()` replaces the whole setup and deletes open chores so they regenerate.
   - A removed bin keeps its schedule row, but its template is deactivated so re-adding the bin reuses it. Treat "configured bins" as schedules whose template is active (`active_pickup_schedules()`).
 
+## Notifications (`chores/notifications.py`)
+
+- `send_due_notification()` claims the (kind, date) `NotificationLog` row before sending, and keeps it even if nothing was due or a destination failed. That's what prevents duplicates and retry storms, so don't add retries without per-destination tracking.
+- It calls `generate_due_chores()` itself, since nobody may have loaded the dashboard yet that day.
+- Tests patch `chores.notifications.send`. To try real sends without an outside service, point `NOTIFY_URLS` at `json://<host>:<port>` and run a small HTTP server on the Compose network to print what arrives.
+- With `DEBUG` off, the test runner prints WhiteNoise's "No directory at: /app/staticfiles/" warning under Compose, because the bind mount hides the image's collected files. It's harmless.
+
 ## UI
 
 - **Row actions (Done, Assign):** each `hx-post`s with `?who=` preserved, and `_lists_response()` in `views.py` returns `chores/_chore_lists.html` to replace `#chore-lists`, so the Mine/Everyone filter re-applies. Without htmx it redirects instead. `assign_chore()` changes only the chore unless `include_future`, which also sets the template's `default_assignee`. htmx sends the CSRF token through `hx-headers` on `<body>`.
