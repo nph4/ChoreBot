@@ -140,6 +140,8 @@ STORAGES = {
 NOTIFY_URLS = os.environ.get('NOTIFY_URLS', '').split()
 NOTIFY_MORNING_AT = os.environ.get('NOTIFY_MORNING_AT', '08:00')
 NOTIFY_EVENING_AT = os.environ.get('NOTIFY_EVENING_AT', '19:00')
+# Base URL people open ChoreBot at, e.g. http://localhost:8000; used for links in notifications.
+SITE_URL = os.environ.get('SITE_URL', '').rstrip('/')
 
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'chores:dashboard'

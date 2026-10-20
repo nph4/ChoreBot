@@ -4,7 +4,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import close_old_connections
 
-from chores.notifications import _parse_time, send, send_due_notification
+from chores.notifications import _parse_time, send, send_due_notification, with_link
 
 CHECK_EVERY_SECONDS = 60
 
@@ -27,7 +27,7 @@ class Command(BaseCommand):
                 raise CommandError('NOTIFY_URLS is empty.')
             self.stdout.write('NOTIFY_URLS is empty; nothing will be sent.')
         if options['test']:
-            if not send('ChoreBot test', 'Notifications are working.'):
+            if not send('ChoreBot test', with_link('Notifications are working.')):
                 raise CommandError('At least one destination failed; see the warnings above.')
             self.stdout.write(self.style.SUCCESS('Test message sent.'))
             return

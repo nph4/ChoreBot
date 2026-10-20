@@ -518,6 +518,18 @@ class NotificationTests(TestCase):
         self.assertIsNone(send_due_notification(self.at(8)))
         self.assertFalse(NotificationLog.objects.exists())
 
+    @override_settings(SITE_URL='http://chores.test')
+    def test_link_to_today_when_site_url_set(self):
+        send_due_notification(self.at(8))
+        _, body = self.send.call_args.args
+        self.assertTrue(body.endswith('\n\n[Open ChoreBot](http://chores.test/)'))
+
+    @override_settings(SITE_URL='')
+    def test_no_link_without_site_url(self):
+        send_due_notification(self.at(8))
+        _, body = self.send.call_args.args
+        self.assertNotIn('Open ChoreBot', body)
+
     @override_settings(NOTIFY_EVENING_AT='')
     def test_empty_time_turns_that_message_off(self):
         self.assertEqual(send_due_notification(self.at(23)).kind, NotificationLog.MORNING)

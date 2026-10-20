@@ -9,6 +9,7 @@ from datetime import time
 import apprise
 from django.conf import settings
 from django.db import IntegrityError
+from django.urls import reverse
 from django.utils import timezone
 
 from .models import Chore, NotificationLog
@@ -65,7 +66,14 @@ def build_message(kind, chores, today):
         ))
     if due_today:
         sections.append('**Due today**\n' + '\n'.join(_line(c) for c in due_today))
-    return title, '\n\n'.join(sections)
+    return title, with_link('\n\n'.join(sections))
+
+
+def with_link(body):
+    """Append a link to the Today page when SITE_URL is set."""
+    if not settings.SITE_URL:
+        return body
+    return f'{body}\n\n[Open ChoreBot]({settings.SITE_URL}{reverse("chores:dashboard")})'
 
 
 def send(title, body):

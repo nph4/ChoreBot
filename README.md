@@ -103,6 +103,7 @@ Settings come from environment variables in `.env` (see `.env.example`):
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT` | Database connection |
 | `TIME_ZONE` | e.g. `America/Los_Angeles`. Decides what "today" is for due dates. |
 | `NOTIFY_URLS` | Where notifications go: one or more Apprise URLs, separated by spaces. Empty sends nothing. |
+| `SITE_URL` | Address you open ChoreBot at, e.g. `http://localhost:8000`. Notifications end with a link to the Today page there; empty means no link. |
 | `NOTIFY_MORNING_AT`, `NOTIFY_EVENING_AT` | Local send times, default `08:00` and `19:00`. Leave one empty to turn that message off. |
 
 In development, Compose runs Django's development server with the repo mounted into the container, so code changes reload live. The image's default command is gunicorn, and with `DJANGO_DEBUG=0` static files (the bundled font, the admin's CSS) are served by [WhiteNoise](https://whitenoise.readthedocs.io/). The Dockerfile runs `collectstatic` at build time, which makes compressed copies with hashed file names that browsers can cache indefinitely, so rebuild the image after changing anything in `static/`.
