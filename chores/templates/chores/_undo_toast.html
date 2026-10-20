@@ -1,0 +1,12 @@
+<div class="toasts" id="toasts" aria-live="polite" hx-swap-oob="true">
+  {% if closed %}
+    <div class="toast with-action">
+      <span>“{{ closed.template.title }}” {% if closed.skipped %}skipped{% else %}done{% endif %}</span>
+      <form method="post" action="{% url 'chores:undo' closed.pk %}?who={{ who }}"
+            hx-post="{% url 'chores:undo' closed.pk %}?who={{ who }}" hx-target="#chore-lists">
+        {% csrf_token %}
+        <button type="submit" class="button flat">Undo</button>
+      </form>
+    </div>
+  {% endif %}
+</div>

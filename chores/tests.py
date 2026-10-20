@@ -805,3 +805,56 @@ class ChoreListTests(TestCase):
         response = self.client.get(reverse('chores:edit_task', args=[mow.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Turn Off')
+
+
+class UndoTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('alex', password='pw')
+        self.client.force_login(self.user)
+        self.today = timezone.localdate()
+        self.template = make_template(title='Vacuum', every_days=7, default_assignee=self.user)
+        self.chore = Chore.objects.create(template=self.template, assignee=None, due_date=self.today - timedelta(days=1))
+
+    def post(self, name, chore=None):
+        return self.client.post(reverse(f'chores:{name}', args=[(chore or self.chore).pk]), headers={'HX-Request': 'true'})
+
+    def test_done_shows_undo_toast_and_undo_restores(self):
+        response = self.post('mark_done')
+        self.assertContains(response, 'hx-swap-oob="true"')
+        self.assertContains(response, '“Vacuum” done')
+        self.assertContains(response, reverse('chores:undo', args=[self.chore.pk]))
+        response = self.post('undo')
+        self.assertTemplateUsed(response, 'chores/_chore_lists.html')
+        self.assertNotContains(response, 'Undo')  # toast cleared
+        self.chore.refresh_from_db()
+        self.assertEqual((self.chore.completed_at, self.chore.completed_by, self.chore.due_date, self.chore.assignee),
+                         (None, None, self.today - timedelta(days=1), None))
+        self.assertEqual(self.template.chores.count(), 1)  # the next one it scheduled is gone
+
+    def test_undo_skip(self):
+        self.assertContains(self.post('skip'), '“Vacuum” skipped')
+        self.post('undo')
+        self.chore.refresh_from_db()
+        self.assertFalse(self.chore.skipped or self.chore.is_done)
+
+    def test_too_late(self):
+        complete_chore(self.chore, self.user)
+        Chore.objects.filter(pk=self.chore.pk).update(completed_at=timezone.now() - timedelta(minutes=11))
+        self.assertEqual(self.post('undo').status_code, 400)
+        self.assertEqual(self.template.chores.filter(completed_at__isnull=True).count(), 1)
+
+    def test_only_latest_closed_chore(self):
+        complete_chore(self.chore, self.user)
+        complete_chore(self.template.chores.get(completed_at__isnull=True), self.user)
+        self.assertEqual(self.post('undo').status_code, 400)
+        self.assertEqual(self.post('undo', self.template.chores.filter(completed_at__isnull=False).latest('completed_at')).status_code, 200)
+
+    def test_open_chore_and_get_are_refused(self):
+        self.assertEqual(self.post('undo').status_code, 400)
+        self.assertEqual(self.client.get(reverse('chores:undo', args=[self.chore.pk])).status_code, 405)
+
+    def test_other_row_actions_clear_the_toast(self):
+        response = self.client.post(reverse('chores:move', args=[self.chore.pk]), {'due_date': self.today.isoformat()},
+                                    headers={'HX-Request': 'true'})
+        self.assertContains(response, 'id="toasts"')
+        self.assertNotContains(response, 'Undo')

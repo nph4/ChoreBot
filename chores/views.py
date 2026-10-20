@@ -7,8 +7,9 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.http import HttpResponseBadRequest
+from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.db.models import Exists, OuterRef
 from django.utils import formats, timezone
@@ -19,7 +20,7 @@ from .models import AwayPeriod, Chore, ChoreTemplate, PickupSchedule
 from .services import (
     active_pickup_schedules, add_away_period, assign_chore, calendar_entries, complete_chore, create_task,
     enable_template, generate_due_chores, move_chore, remove_template, save_pickup_schedules, skip_chore,
-    update_template,
+    undo_close, update_template,
 )
 
 UPCOMING_DAYS = 7
@@ -44,10 +45,17 @@ def _list_context(request):
     }
 
 
-def _lists_response(request):
-    """After a row action: the refreshed lists for htmx, or a redirect back to the dashboard."""
+def _lists_response(request, closed=None):
+    """After a row action: the refreshed lists for htmx, or a redirect back to the dashboard.
+
+    The htmx response also replaces the toast area out of band: with an Undo toast
+    when `closed` (a chore just done or skipped) is given, otherwise empty.
+    """
     if request.headers.get('HX-Request'):
-        return render(request, 'chores/_chore_lists.html', _list_context(request))
+        context = _list_context(request)
+        html = render_to_string('chores/_chore_lists.html', context, request=request)
+        html += render_to_string('chores/_undo_toast.html', {**context, 'closed': closed}, request=request)
+        return HttpResponse(html)
     who = 'mine' if request.GET.get('who') == 'mine' else 'everyone'
     return redirect(f"{reverse('chores:dashboard')}?who={who}")
 
@@ -67,6 +75,15 @@ def dashboard(request):
 def mark_done(request, pk):
     chore = get_object_or_404(Chore, pk=pk)
     complete_chore(chore, request.user)
+    return _lists_response(request, closed=chore)
+
+
+@login_required
+@require_POST
+def undo(request, pk):
+    chore = get_object_or_404(Chore, pk=pk)
+    if not undo_close(chore):
+        return HttpResponseBadRequest('Too late to undo.')
     return _lists_response(request)
 
 
@@ -88,7 +105,7 @@ def skip(request, pk):
     if chore.template.is_one_off:
         return HttpResponseBadRequest('One-off chores can be moved, not skipped.')
     skip_chore(chore, request.user)
-    return _lists_response(request)
+    return _lists_response(request, closed=chore)
 
 
 @login_required

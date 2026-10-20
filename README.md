@@ -16,7 +16,7 @@ The goal is to generate SMART (Specific, Measurable, Assignable, Realistic, Time
   - how often it repeats (time-bound)
 
   Chores are generated from these templates by rules, with no AI.
-- **Today dashboard.** Lists Overdue, Due today and Coming up (next 7 days), with an Everyone/Mine filter. Marking a chore done schedules the next one straight away.
+- **Today dashboard.** Lists Overdue, Due today and Coming up (next 7 days), with an Everyone/Mine filter. Marking a chore done schedules the next one straight away. A toast with **Undo** follows Done and Skip for 10 seconds; undoing reopens the chore as it was and drops the next one it scheduled. The server accepts an undo for up to 10 minutes after the chore was closed, and only for that chore's most recent occurrence.
 - **Calendar.** A month view, opened from the main menu (☰ → Calendar). It shows:
   - open chores, with overdue ones in red
   - chores already done or skipped, on the day they were done or skipped

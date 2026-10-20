@@ -114,6 +114,30 @@ def skip_chore(chore, user):
     generate_due_chores()
 
 
+UNDO_WINDOW = timedelta(minutes=10)
+
+
+@transaction.atomic
+def undo_close(chore):
+    """Reopen a chore that was just done or skipped. Returns False if it's too late to undo.
+
+    Only the template's latest closed chore can be reopened, within UNDO_WINDOW.
+    The open chore that closing it scheduled is deleted first, keeping one open
+    chore per template.
+    """
+    if chore.completed_at is None or timezone.now() - chore.completed_at > UNDO_WINDOW:
+        return False
+    latest = chore.template.chores.filter(completed_at__isnull=False).order_by('-completed_at').first()
+    if latest != chore:
+        return False
+    chore.template.chores.filter(completed_at__isnull=True).delete()
+    chore.completed_at = None
+    chore.completed_by = None
+    chore.skipped = False
+    chore.save(update_fields=['completed_at', 'completed_by', 'skipped'])
+    return True
+
+
 def move_chore(chore, day):
     """Set an open chore's due date by hand. Away periods and frequency changes leave it there."""
     chore.due_date = day

@@ -193,6 +193,7 @@
       box-shadow: 0 0 0 1px var(--line), 0 2px 14px 3px var(--shadow);
       animation: toast 4s ease forwards;
     }
+    .toast.with-action { display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 20px; pointer-events: auto; animation-duration: 10s; }
     @keyframes toast { 0% { opacity: 0; transform: translateY(8px); } 6%, 85% { opacity: 1; transform: none; } 100% { opacity: 0; visibility: hidden; } }
 
     /* Narrow (phone) layout: icon-only assign button, name moves into the caption. */
@@ -245,11 +246,9 @@
     </div>
   </header>
   {% block banner %}{% endblock %}
-  {% if messages %}
-    <div class="toasts" aria-live="polite">
-      {% for message in messages %}<div class="toast">{{ message }}</div>{% endfor %}
-    </div>
-  {% endif %}
+  <div class="toasts" id="toasts" aria-live="polite">
+    {% for message in messages %}<div class="toast">{{ message }}</div>{% endfor %}
+  </div>
   <main class="clamp {% block main_class %}{% endblock %}">
     {% block content %}{% endblock %}
   </main>
