@@ -106,6 +106,8 @@ class TaskForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
+        if 'repeat' not in self.fields:
+            return cleaned
         repeat = cleaned.get('repeat')
         if repeat == 'custom':
             if not cleaned.get('every_days'):
@@ -122,6 +124,56 @@ class TaskForm(forms.Form):
             'estimated_minutes': c['estimated_minutes'], 'every_days': c['every_days'],
             'start_date': c['start_date'], 'assignee': c['assignee'],
         }
+
+
+class EditTaskForm(TaskForm):
+    """TaskForm filled in from an existing template. Pickup chores leave out the schedule fields."""
+
+    def __init__(self, *args, template, open_chore, is_pickup, **kwargs):
+        every_days = template.every_days
+        repeat = next((key for key, days in REPEAT_DAYS.items() if days == every_days), 'custom')
+        kwargs['initial'] = {
+            'title': template.title, 'area': template.area, 'done_when': template.done_when,
+            'estimated_minutes': template.estimated_minutes, 'assignee': template.default_assignee,
+            'repeat': repeat, 'every_days': every_days if repeat == 'custom' else None,
+            'start_date': open_chore.due_date if open_chore else None,
+        }
+        super().__init__(*args, **kwargs)
+        self.fields['start_date'].initial = None
+        self.fields['start_date'].label = 'Next due'
+        self.fields['start_date'].help_text = 'Changing it moves only the next one.'
+        if is_pickup or open_chore is None:
+            del self.fields['start_date']
+        if is_pickup:
+            del self.fields['repeat'], self.fields['every_days']
+
+    def update_fields(self):
+        """Keyword arguments for services.update_template."""
+        c = self.cleaned_data
+        return {
+            'title': c['title'], 'area': c['area'], 'done_when': c['done_when'],
+            'estimated_minutes': c['estimated_minutes'], 'assignee': c['assignee'],
+            'every_days': c.get('every_days'), 'due_date': c.get('start_date'),
+        }
+
+
+class MoveForm(forms.Form):
+    due_date = forms.DateField()
+
+
+class AwayForm(forms.Form):
+    start = forms.DateField(label='From', widget=forms.DateInput(attrs={'type': 'date'}))
+    end = forms.DateField(label='Until', help_text='The last day you\'re away.', widget=forms.DateInput(attrs={'type': 'date'}))
+
+    def clean(self):
+        cleaned = super().clean()
+        start, end = cleaned.get('start'), cleaned.get('end')
+        if start and end:
+            if end < start:
+                self.add_error('end', 'Must be on or after the first day.')
+            elif end < timezone.localdate():
+                self.add_error('end', "That's already over.")
+        return cleaned
 
 
 class NewUserForm(UserCreationForm):

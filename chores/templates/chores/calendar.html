@@ -27,6 +27,8 @@
   }
   .entry.overdue { background: color-mix(in srgb, var(--late) 30%, transparent); }
   .entry.done { background: none; color: var(--muted); text-decoration: line-through; }
+  .entry.skipped { background: none; color: var(--muted); text-decoration: line-through dashed; font-style: italic; }
+  .cal-day.away, .entry.away-key { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--fg) 7%, transparent) 6px 12px); }
   .entry.projected { background: none; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
   .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 16px; margin-top: 14px; }
   .legend .entry { display: inline-block; }
@@ -71,12 +73,13 @@
     <div class="cal-body">
     {% for week in weeks %}
       <div class="cal-week" role="row">
-        {% for day, entries in week %}
-          <div role="gridcell" class="cal-day{% if day.month != month.month %} outside{% endif %}{% if day == today %} today{% endif %}{% if not entries %} empty{% endif %}">
+        {% for day, entries, away in week %}
+          <div role="gridcell" class="cal-day{% if day.month != month.month %} outside{% endif %}{% if day == today %} today{% endif %}{% if away %} away{% endif %}{% if not entries %} empty{% endif %}">
             <div class="daynum"><span class="wd">{{ day|date:"D" }}</span>{{ day.day }}<span class="wd">{{ day|date:"M" }}</span></div>
+            {% if away %}<span class="visually-hidden">Away</span>{% endif %}
             {% for kind, template, chore, who_for in entries %}
-              <div class="entry {{ kind }}" title="{{ template.title }}{% if template.area %} · {{ template.area }}{% endif %}{% if who_for %} · {{ who_for.get_username }}{% endif %}{% if kind == "projected" %} (projected){% elif kind == "done" %} (done){% elif kind == "overdue" %} (overdue){% endif %}">
-                {% if kind == "done" %}<span class="visually-hidden">Done: </span>{% elif kind == "projected" %}<span class="visually-hidden">Projected: </span>{% elif kind == "overdue" %}<span class="visually-hidden">Overdue: </span>{% endif %}{{ template.title }}
+              <div class="entry {{ kind }}" title="{{ template.title }}{% if template.area %} · {{ template.area }}{% endif %}{% if who_for %} · {{ who_for.get_username }}{% endif %}{% if kind == "projected" %} (projected){% elif kind == "done" %} (done){% elif kind == "skipped" %} (skipped){% elif kind == "overdue" %} (overdue){% endif %}">
+                {% if kind == "done" %}<span class="visually-hidden">Done: </span>{% elif kind == "skipped" %}<span class="visually-hidden">Skipped: </span>{% elif kind == "projected" %}<span class="visually-hidden">Projected: </span>{% elif kind == "overdue" %}<span class="visually-hidden">Overdue: </span>{% endif %}{{ template.title }}
               </div>
             {% endfor %}
           </div>
@@ -90,6 +93,8 @@
     <span class="entry open">Due</span>
     <span class="entry overdue">Overdue</span>
     <span class="entry done">Done</span>
+    <span class="entry skipped">Skipped</span>
+    <span class="entry away-key">Away</span>
     <span class="entry projected">Projected repeat</span>
   </div>
 {% endblock %}

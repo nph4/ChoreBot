@@ -12,11 +12,11 @@ from django.urls import reverse
 from django.utils import formats, timezone
 from django.views.decorators.http import require_POST
 
-from .forms import AssignForm, NewUserForm, PickupSetupForm, ScheduleForm, TaskForm
-from .models import Chore, PickupSchedule
+from .forms import AssignForm, AwayForm, EditTaskForm, MoveForm, NewUserForm, PickupSetupForm, ScheduleForm, TaskForm
+from .models import AwayPeriod, Chore, ChoreTemplate, PickupSchedule
 from .services import (
-    active_pickup_schedules, assign_chore, calendar_entries, complete_chore, create_task,
-    generate_due_chores, save_pickup_schedules,
+    active_pickup_schedules, add_away_period, assign_chore, calendar_entries, complete_chore, create_task,
+    generate_due_chores, move_chore, remove_template, save_pickup_schedules, skip_chore, update_template,
 )
 
 UPCOMING_DAYS = 7
@@ -54,6 +54,8 @@ def dashboard(request):
     generate_due_chores()
     context = _list_context(request)
     context['needs_pickup_setup'] = not PickupSchedule.objects.exists()
+    today = timezone.localdate()
+    context['away'] = AwayPeriod.objects.filter(start__lte=today, end__gte=today).order_by('-end').first()
     return render(request, 'chores/dashboard.html', context)
 
 
@@ -74,6 +76,74 @@ def assign(request, pk):
         return HttpResponseBadRequest('Unknown household member.')
     assign_chore(chore, form.cleaned_data['assignee'], include_future=form.cleaned_data['include_future'])
     return _lists_response(request)
+
+
+@login_required
+@require_POST
+def skip(request, pk):
+    chore = get_object_or_404(Chore, pk=pk, completed_at__isnull=True)
+    if chore.template.is_one_off:
+        return HttpResponseBadRequest('One-off chores can be moved, not skipped.')
+    skip_chore(chore, request.user)
+    return _lists_response(request)
+
+
+@login_required
+@require_POST
+def move(request, pk):
+    chore = get_object_or_404(Chore, pk=pk, completed_at__isnull=True)
+    form = MoveForm(request.POST)
+    if not form.is_valid():
+        return HttpResponseBadRequest('Enter a valid date.')
+    move_chore(chore, form.cleaned_data['due_date'])
+    return _lists_response(request)
+
+
+@login_required
+def edit_template(request, pk):
+    template = get_object_or_404(ChoreTemplate, pk=pk, active=True)
+    open_chore = template.chores.filter(completed_at__isnull=True).first()
+    is_pickup = PickupSchedule.objects.filter(template=template).exists()
+    form = EditTaskForm(request.POST or None, template=template, open_chore=open_chore, is_pickup=is_pickup)
+    if request.method == 'POST' and form.is_valid():
+        update_template(template, **form.update_fields())
+        messages.success(request, f'“{template.title}” saved')
+        return redirect('chores:dashboard')
+    return render(request, 'chores/task_form.html', {'form': form, 'template': template, 'is_pickup': is_pickup})
+
+
+@login_required
+@require_POST
+def remove(request, pk):
+    template = get_object_or_404(ChoreTemplate, pk=pk, active=True)
+    if PickupSchedule.objects.filter(template=template).exists():
+        return HttpResponseBadRequest('Remove a bin from the pickup schedule instead.')
+    remove_template(template)
+    messages.success(request, f'“{template.title}” removed')
+    return redirect('chores:dashboard')
+
+
+@login_required
+def away(request):
+    """Add and list away periods."""
+    form = AwayForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        period = add_away_period(form.cleaned_data['start'], form.cleaned_data['end'])
+        messages.success(request, f'Away {formats.date_format(period.start, "D j M")} – {formats.date_format(period.end, "D j M")}')
+        return redirect('chores:away')
+    return render(request, 'chores/away.html', {
+        'form': form,
+        'periods': AwayPeriod.objects.filter(end__gte=timezone.localdate()),
+        'today': timezone.localdate(),
+    })
+
+
+@login_required
+@require_POST
+def delete_away(request, pk):
+    get_object_or_404(AwayPeriod, pk=pk).delete()
+    messages.success(request, 'Away dates removed')
+    return redirect('chores:away')
 
 
 @login_required
@@ -149,6 +219,9 @@ def calendar_view(request):
     entries = calendar_entries(
         weeks[0][0], weeks[-1][-1], assignee=request.user if who == 'mine' else None, today=today
     )
+    away_days = set()
+    for period in AwayPeriod.objects.filter(start__lte=weeks[-1][-1], end__gte=weeks[0][0]):
+        away_days.update(period.start + timedelta(days=i) for i in range((period.end - period.start).days + 1))
     prev_month = (month - timedelta(days=1)).replace(day=1)
     next_month = (month + timedelta(days=31)).replace(day=1)
     return render(request, 'chores/calendar.html', {
@@ -156,7 +229,7 @@ def calendar_view(request):
         'month': month,
         'today': today,
         'weekday_names': [calendar.day_abbr[(first_weekday + i) % 7] for i in range(7)],
-        'weeks': [[(day, entries.get(day, [])) for day in week] for week in weeks],
+        'weeks': [[(day, entries.get(day, []), day in away_days) for day in week] for week in weeks],
         'prev_month': prev_month.strftime('%Y-%m'),
         'next_month': next_month.strftime('%Y-%m'),
         'this_month': today.strftime('%Y-%m'),

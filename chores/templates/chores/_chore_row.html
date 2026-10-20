@@ -37,4 +37,29 @@
       </form>
     </div>
   </details>
+  <details class="popover-menu">
+    <summary class="button flat icon-only" title="More Actions" aria-label="More actions for “{{ chore.template.title }}”">
+      <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="3" r="1.6"/><circle cx="8" cy="8" r="1.6"/><circle cx="8" cy="13" r="1.6"/></svg>
+    </summary>
+    <div class="popover" role="menu">
+      {% if not chore.template.is_one_off %}
+        <form method="post" action="{% url 'chores:skip' chore.pk %}?who={{ who }}"
+              hx-post="{% url 'chores:skip' chore.pk %}?who={{ who }}" hx-target="#chore-lists">
+          {% csrf_token %}
+          <button type="submit" class="menu-item" role="menuitem">Skip This One</button>
+        </form>
+        <div class="menu-separator"></div>
+      {% endif %}
+      <div class="heading">Move To</div>
+      <form class="stack" method="post" action="{% url 'chores:move' chore.pk %}?who={{ who }}"
+            hx-post="{% url 'chores:move' chore.pk %}?who={{ who }}" hx-target="#chore-lists">
+        {% csrf_token %}
+        <label class="visually-hidden" for="move-{{ chore.pk }}">New due date</label>
+        <input type="date" name="due_date" id="move-{{ chore.pk }}" value="{{ chore.due_date|date:"Y-m-d" }}" required>
+        <button type="submit" class="button">Move</button>
+      </form>
+      <div class="menu-separator"></div>
+      <a class="menu-item" role="menuitem" href="{% url 'chores:edit_task' chore.template.pk %}">Edit Chore…</a>
+    </div>
+  </details>
 </li>

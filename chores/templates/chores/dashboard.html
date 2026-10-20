@@ -4,6 +4,12 @@
 {% block headerbar_title %}Today{% endblock %}
 
 {% block banner %}
+  {% if away %}
+    <div class="banner" role="status">
+      <span>Away until {{ away.end|date:"l j F" }}. Chores due before then have moved to the day after.</span>
+      <a class="button" href="{% url 'chores:away' %}">Away Dates</a>
+    </div>
+  {% endif %}
   {% if needs_pickup_setup %}
     <div class="banner" role="status">
       <span>Set up your pickup schedule so ChoreBot can remind you to take the bins out.</span>

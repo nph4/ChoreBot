@@ -1,0 +1,40 @@
+{% extends "chores/base.html" %}
+
+{% block title %}Away · ChoreBot{% endblock %}
+{% block headerbar_title %}Away{% endblock %}
+
+{% block content %}
+  <section class="group">
+    <h2 class="heading">Away Dates</h2>
+    <ul class="boxed-list">
+      {% for period in periods %}
+        <li class="row">
+          <div class="row-content">
+            <div>{{ period.start|date:"D j M" }} – {{ period.end|date:"D j M Y" }}</div>
+            <div class="row-subtitle">{% if period.start <= today %}Away now{% else %}Coming up{% endif %}</div>
+          </div>
+          <form method="post" action="{% url 'chores:delete_away' period.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="button flat icon-only" title="Remove" aria-label="Remove away dates {{ period.start|date:"j M" }} – {{ period.end|date:"j M" }}">
+              <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 1v1H2v2h12V2h-3V1zM3 5l1 10h8l1-10z"/></svg>
+            </button>
+          </form>
+        </li>
+      {% empty %}
+        <li class="row placeholder">No away dates</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <section class="group">
+      <h2 class="heading">Add Away Dates</h2>
+      <ul class="boxed-list">{% include "chores/_form_rows.html" %}</ul>
+      <p class="dim caption">While you're away there are no notifications, bin pickups are skipped, and other chores move to the day you get back. Removing away dates doesn't move chores back.</p>
+    </section>
+    <div class="actions">
+      <button type="submit" class="button suggested pill">Add</button>
+    </div>
+  </form>
+{% endblock %}

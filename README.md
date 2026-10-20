@@ -19,7 +19,7 @@ The goal is to generate SMART (Specific, Measurable, Assignable, Realistic, Time
 - **Today dashboard.** Lists Overdue, Due today and Coming up (next 7 days), with an Everyone/Mine filter. Marking a chore done schedules the next one straight away.
 - **Calendar.** A month view, opened from the main menu (☰ → Calendar). It shows:
   - open chores, with overdue ones in red
-  - chores already done, on the day they were done
+  - chores already done or skipped, on the day they were done or skipped
   - **projected repeats**, outlined: future occurrences worked out from each chore's repeat rule
 
   Projections assume each chore is done on time. Pickup projections follow the pickup schedule. Everyone/Mine works here too, and on a phone the month turns into a list of only the days that have chores.
@@ -31,6 +31,11 @@ The goal is to generate SMART (Specific, Measurable, Assignable, Realistic, Time
   - how it repeats: **Once** (one-off), **Daily**, **Weekly**, **Monthly** (every 30 days) or **Custom** (every N days)
 
   Repeats count from when the last one was done. A one-off disappears once it's done.
+- **Changing chores.** Each chore on the dashboard has a ⋮ menu:
+  - **Skip This One** closes it without marking it done. The next one is due the repeat interval after today, or on the next pickup for bins. One-off chores can't be skipped.
+  - **Move To** sets this one's due date. Only this occurrence moves.
+  - **Edit Chore…** changes the title, area, "done when", minutes, repeat, next due date and default assignee. Changing how often it repeats reschedules the open chore from the last time it was done, but never into the past, and leaves a date you moved by hand alone. Bin chores take their dates from the pickup schedule instead. **Remove Chore** stops a chore repeating; its history stays, and the admin can turn it back on.
+- **Away dates.** ☰ → Away records days nobody is home. While away, no notifications are sent, bin pickups that fall in the range are skipped, and other chores due in it move to the day you get back. Chores that were already overdue stay as they are, and removing away dates doesn't move chores back. The calendar shades away days and the dashboard shows a banner.
 - **Garbage, recycling and compost pickup.** Many cities don't collect every bin every week. Portland, OR, for example, collects recycling and compost weekly and garbage every other week. The pickup setup page asks:
   1. Are all bins picked up on the same schedule and day? If yes, you enter one schedule for all of them. If no, you enter a schedule for each bin.
   2. Do you also have compost/yard waste pickup?
@@ -38,7 +43,7 @@ The goal is to generate SMART (Specific, Measurable, Assignable, Realistic, Time
 
   The dashboard prompts for this setup until it's done.
 - **Household members.** Any active user account can be assigned chores. Superusers can add members from ☰ → New User…; switch on **Administrator** to let that person create users and use the admin site too. Each chore on the dashboard has an **Assign** button (the person icon): pick a person (or Unassigned) and tick **Also future ones** to make them the default for that chore's later occurrences too, or leave it unticked to change only this one. The **Mine** filter shows chores assigned to you; **Everyone** shows all.
-- **Notifications.** A morning digest lists chores that are overdue or due today. An evening nudge lists whichever of them are still not done; AM-pickup bins are due the day before pickup, so they show up in that evening's nudge. Messages go to every destination in `NOTIFY_URLS`, for the whole household, and are skipped when nothing is due. Discord, Telegram, Signal and email all work through [Apprise](https://github.com/caronc/apprise); see [Notifications](#notifications).
+- **Notifications.** A morning digest lists chores that are overdue or due today. An evening nudge lists whichever of them are still not done; AM-pickup bins are due the day before pickup, so they show up in that evening's nudge. Messages go to every destination in `NOTIFY_URLS`, for the whole household, and are skipped when nothing is due or you're away. Discord, Telegram, Signal and email all work through [Apprise](https://github.com/caronc/apprise); see [Notifications](#notifications).
 - **GNOME-style interface.** Follows Adwaita / GNOME design patterns:
   - a header bar with a main menu
   - toasts confirming actions

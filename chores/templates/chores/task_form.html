@@ -1,7 +1,7 @@
 {% extends "chores/base.html" %}
 
-{% block title %}New Task · ChoreBot{% endblock %}
-{% block headerbar_title %}New Task{% endblock %}
+{% block title %}{% if template %}Edit Chore{% else %}New Task{% endif %} · ChoreBot{% endblock %}
+{% block headerbar_title %}{% if template %}Edit Chore{% else %}New Task{% endif %}{% endblock %}
 
 {% block extra_style %}
   #task-form .boxed-list:not(:has(input[name="repeat"][value="custom"]:checked)) .field-every_days { display: none; }
@@ -11,11 +11,31 @@
   <form method="post" id="task-form" novalidate>
     {% csrf_token %}
     <section class="group">
-      <h2 class="heading">Task</h2>
+      <h2 class="heading">{% if template %}Chore{% else %}Task{% endif %}</h2>
       <ul class="boxed-list">{% include "chores/_form_rows.html" %}</ul>
     </section>
+    {% if is_pickup %}
+      <section class="group">
+        <h2 class="heading">Schedule</h2>
+        <ul class="boxed-list">
+          <li class="row">
+            <div class="row-content">
+              <div>Follows the pickup schedule</div>
+              <div class="row-subtitle">To skip one pickup, use Skip This One on the Today page.</div>
+            </div>
+            <a class="button suffix" href="{% url 'chores:pickup_setup' %}">Pickup Schedule</a>
+          </li>
+        </ul>
+      </section>
+    {% endif %}
     <div class="actions">
-      <button type="submit" class="button suggested pill">Create Task</button>
+      <button type="submit" class="button suggested pill">{% if template %}Save{% else %}Create Task{% endif %}</button>
     </div>
   </form>
+  {% if template and not is_pickup %}
+    <form method="post" action="{% url 'chores:remove_task' template.pk %}" class="actions">
+      {% csrf_token %}
+      <button type="submit" class="button destructive pill">Remove Chore</button>
+    </form>
+  {% endif %}
 {% endblock %}

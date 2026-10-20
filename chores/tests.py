@@ -7,9 +7,12 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Chore, ChoreTemplate, NotificationLog, PickupSchedule
+from .models import AwayPeriod, Chore, ChoreTemplate, NotificationLog, PickupSchedule
 from .notifications import send, send_due_notification
-from .services import complete_chore, generate_due_chores, next_due_date, save_pickup_schedules
+from .services import (
+    add_away_period, calendar_entries, complete_chore, generate_due_chores, next_due_date, save_pickup_schedules,
+    skip_chore, update_template,
+)
 
 
 def make_template(**kwargs):
@@ -345,7 +348,7 @@ class CalendarTests(TestCase):
         self.assertEqual(response.status_code, 200)
         return {
             (day, kind, template.title)
-            for week in response.context['weeks'] for day, entries in week for kind, template, _, _ in entries
+            for week in response.context['weeks'] for day, entries, _ in week for kind, template, _, _ in entries
         }
 
     def test_open_done_and_projected(self):
@@ -505,6 +508,11 @@ class NotificationTests(TestCase):
         self.assertIsNone(send_due_notification(self.at(8, 1)))
         self.send.assert_called_once()
 
+    def test_nothing_sent_while_away(self):
+        AwayPeriod.objects.create(start=self.day, end=self.day)
+        self.assertIsNone(send_due_notification(self.at(8)))
+        self.assertIsNotNone(send_due_notification(self.at(8, day=self.day + timedelta(days=1))))
+
     @override_settings(NOTIFY_URLS=[])
     def test_no_urls_means_no_notifications(self):
         self.assertIsNone(send_due_notification(self.at(8)))
@@ -526,3 +534,198 @@ class AppriseSendTests(TestCase):
     def test_unrecognised_url_counts_as_failure(self):
         with mock.patch('apprise.Apprise.notify', return_value=True), self.assertLogs('chores.notifications', 'WARNING'):
             self.assertFalse(send('Title', 'Body'))
+
+
+def close(chore, days_ago):
+    """Mark a chore done as if it were done days_ago."""
+    chore.completed_at = timezone.now() - timedelta(days=days_ago)
+    chore.save(update_fields=['completed_at'])
+
+
+class SkipAndMoveTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('alex', password='pw')
+        self.client.force_login(self.user)
+        self.today = timezone.localdate()
+        self.template = make_template(title='Vacuum', every_days=7)
+        self.chore = Chore.objects.create(template=self.template, due_date=self.today - timedelta(days=3))
+
+    def open_chore(self, template=None):
+        return (template or self.template).chores.get(completed_at__isnull=True)
+
+    def test_skip_schedules_next_from_today_and_is_not_done(self):
+        response = self.client.post(reverse('chores:skip', args=[self.chore.pk]), headers={'HX-Request': 'true'})
+        self.assertTemplateUsed(response, 'chores/_chore_lists.html')
+        self.chore.refresh_from_db()
+        self.assertTrue(self.chore.skipped)
+        self.assertEqual(self.chore.completed_by, self.user)
+        self.assertEqual(self.open_chore().due_date, self.today + timedelta(days=7))
+
+    def test_skip_pickup_moves_to_next_pickup(self):
+        save_pickup_schedules({PickupSchedule.GARBAGE: (1, self.today + timedelta(days=2), False)})
+        bins = PickupSchedule.objects.get().template
+        skip_chore(self.open_chore(bins), self.user)
+        self.assertEqual(self.open_chore(bins).due_date, self.today + timedelta(days=9))
+
+    def test_one_off_cannot_be_skipped(self):
+        make_template(title='Fix gate', every_days=None)
+        [chore] = generate_due_chores()
+        self.assertEqual(self.client.post(reverse('chores:skip', args=[chore.pk])).status_code, 400)
+        self.assertNotContains(self.client.get(reverse('chores:dashboard')), reverse('chores:skip', args=[chore.pk]))
+        self.assertFalse(Chore.objects.get(pk=chore.pk).is_done)
+
+    def test_move(self):
+        new_day = self.today + timedelta(days=4)
+        self.client.post(reverse('chores:move', args=[self.chore.pk]), {'due_date': new_day.isoformat()})
+        self.chore.refresh_from_db()
+        self.assertEqual((self.chore.due_date, self.chore.moved_by_hand), (new_day, True))
+
+    def test_move_needs_a_date(self):
+        response = self.client.post(reverse('chores:move', args=[self.chore.pk]), {'due_date': 'soon'})
+        self.assertEqual(response.status_code, 400)
+
+    def test_calendar_shows_skipped(self):
+        skip_chore(self.chore, self.user)
+        entries = calendar_entries(self.today, self.today)
+        self.assertIn('skipped', [kind for kind, *_ in entries[self.today]])
+
+
+class EditTaskTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('alex', password='pw')
+        self.client.force_login(self.user)
+        self.today = timezone.localdate()
+        self.template = make_template(title='Vacuum', every_days=7)
+        [first] = generate_due_chores()
+        close(first, days_ago=3)
+        [self.chore] = generate_due_chores()  # due in 4 days
+        self.url = reverse('chores:edit_task', args=[self.template.pk])
+
+    def post(self, **changes):
+        data = {
+            'title': 'Vacuum', 'area': 'Kitchen', 'done_when': 'Sink empty', 'estimated_minutes': 10,
+            'repeat': 'weekly', 'start_date': self.chore.due_date.isoformat(), 'assignee': '',
+        }
+        return self.client.post(self.url, {**data, **changes})
+
+    def test_form_is_filled_in(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['form']['repeat'].value(), 'weekly')
+        self.assertEqual(response.context['form']['start_date'].value(), self.chore.due_date)
+
+    def test_more_often_reschedules_but_not_into_the_past(self):
+        self.assertRedirects(self.post(repeat='daily'), reverse('chores:dashboard'))
+        self.chore.refresh_from_db()
+        self.assertEqual(self.chore.due_date, self.today)
+
+    def test_less_often_reschedules_from_last_done(self):
+        self.post(repeat='custom', every_days=14)
+        self.chore.refresh_from_db()
+        self.assertEqual(self.chore.due_date, self.today + timedelta(days=11))
+
+    def test_frequency_change_keeps_date_moved_by_hand(self):
+        self.chore.moved_by_hand = True
+        self.chore.save()
+        self.post(repeat='daily')
+        self.chore.refresh_from_db()
+        self.assertEqual(self.chore.due_date, self.today + timedelta(days=4))
+
+    def test_new_due_date_moves_chore(self):
+        self.post(start_date=(self.today + timedelta(days=1)).isoformat())
+        self.chore.refresh_from_db()
+        self.assertEqual((self.chore.due_date, self.chore.moved_by_hand), (self.today + timedelta(days=1), True))
+
+    def test_new_assignee_takes_over_open_chore(self):
+        self.post(assignee=self.user.pk, title='Vacuum upstairs')
+        self.chore.refresh_from_db()
+        self.template.refresh_from_db()
+        self.assertEqual((self.chore.assignee, self.template.default_assignee), (self.user, self.user))
+        self.assertEqual(self.template.title, 'Vacuum upstairs')
+
+    def test_pickup_edit_leaves_schedule_alone(self):
+        save_pickup_schedules({PickupSchedule.GARBAGE: (1, self.today + timedelta(days=2), False)})
+        bins = PickupSchedule.objects.get().template
+        url = reverse('chores:edit_task', args=[bins.pk])
+        response = self.client.get(url)
+        self.assertNotIn('repeat', response.context['form'].fields)
+        self.assertNotContains(response, reverse('chores:remove_task', args=[bins.pk]))
+        self.client.post(url, {'title': 'Garbage out', 'done_when': 'At the curb', 'estimated_minutes': 5})
+        bins.refresh_from_db()
+        self.assertEqual((bins.title, bins.every_days), ('Garbage out', 7))
+        self.assertEqual(bins.chores.get(completed_at__isnull=True).due_date, self.today + timedelta(days=2))
+        self.assertEqual(self.client.post(reverse('chores:remove_task', args=[bins.pk])).status_code, 400)
+
+    def test_remove_keeps_history(self):
+        self.assertRedirects(self.client.post(reverse('chores:remove_task', args=[self.template.pk])), reverse('chores:dashboard'))
+        self.template.refresh_from_db()
+        self.assertFalse(self.template.active)
+        self.assertEqual(self.template.chores.count(), 1)  # the done one
+        self.assertFalse(self.template.chores.filter(completed_at__isnull=True).exists())
+
+    def test_finished_one_off_that_now_repeats_comes_back(self):
+        one_off = make_template(title='Fix gate', every_days=None)
+        [chore] = generate_due_chores()
+        close(chore, days_ago=2)
+        update_template(one_off, title='Fix gate', area='', done_when='Latches', estimated_minutes=10,
+                        assignee=None, every_days=30)
+        self.assertEqual(one_off.chores.get(completed_at__isnull=True).due_date, self.today + timedelta(days=28))
+
+
+class AwayTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('alex', password='pw')
+        self.client.force_login(self.user)
+        self.today = timezone.localdate()
+        self.start, self.end = self.today + timedelta(days=2), self.today + timedelta(days=8)
+
+    def test_adding_away_moves_chores_and_skips_pickups(self):
+        vacuum = make_template(title='Vacuum')
+        Chore.objects.create(template=vacuum, due_date=self.today + timedelta(days=3))
+        late = make_template(title='Laundry')
+        Chore.objects.create(template=late, due_date=self.today - timedelta(days=1))
+        save_pickup_schedules({PickupSchedule.GARBAGE: (1, self.today + timedelta(days=4), False)})
+        bins = PickupSchedule.objects.get().template
+
+        add_away_period(self.start, self.end)
+        self.assertEqual(vacuum.chores.get().due_date, self.end + timedelta(days=1))
+        self.assertEqual(late.chores.get().due_date, self.today - timedelta(days=1))  # already overdue: stays
+        self.assertEqual(bins.chores.get().due_date, self.today + timedelta(days=11))
+
+    def test_new_due_dates_avoid_away(self):
+        AwayPeriod.objects.create(start=self.start, end=self.end)
+        template = make_template(title='Water plants', every_days=3)
+        self.assertEqual(next_due_date(template, self.today), self.today)
+        [chore] = generate_due_chores()
+        complete_chore(chore, self.user)  # next would be today + 3, inside the away period
+        self.assertEqual(template.chores.get(completed_at__isnull=True).due_date, self.end + timedelta(days=1))
+
+    def test_calendar_projections_and_shading(self):
+        AwayPeriod.objects.create(start=self.start, end=self.end)
+        make_template(title='Water plants', every_days=1)
+        generate_due_chores()
+        entries = calendar_entries(self.today, self.end + timedelta(days=2))
+        days = sorted(day for day, items in entries.items() for kind, t, _, _ in items if t.title == 'Water plants')
+        self.assertEqual(days, [self.today, self.today + timedelta(days=1), self.end + timedelta(days=1), self.end + timedelta(days=2)])
+        response = self.client.get(reverse('chores:calendar'))
+        away_days = {day for week in response.context['weeks'] for day, _, away in week if away}
+        self.assertIn(self.start, away_days)
+
+    def test_away_page_add_list_delete(self):
+        response = self.client.post(reverse('chores:away'), {'start': self.start.isoformat(), 'end': self.end.isoformat()})
+        self.assertRedirects(response, reverse('chores:away'))
+        period = AwayPeriod.objects.get()
+        self.assertContains(self.client.get(reverse('chores:away')), reverse('chores:delete_away', args=[period.pk]))
+        self.client.post(reverse('chores:delete_away', args=[period.pk]))
+        self.assertFalse(AwayPeriod.objects.exists())
+
+    def test_away_form_rejects_backwards_or_past_dates(self):
+        response = self.client.post(reverse('chores:away'), {'start': self.end.isoformat(), 'end': self.start.isoformat()})
+        self.assertContains(response, 'Must be on or after the first day.')
+        past = (self.today - timedelta(days=1)).isoformat()
+        self.assertContains(self.client.post(reverse('chores:away'), {'start': past, 'end': past}), 'already over')
+        self.assertFalse(AwayPeriod.objects.exists())
+
+    def test_dashboard_banner_while_away(self):
+        self.assertNotContains(self.client.get(reverse('chores:dashboard')), 'Away until')
+        AwayPeriod.objects.create(start=self.today, end=self.end)
+        self.assertContains(self.client.get(reverse('chores:dashboard')), 'Away until')

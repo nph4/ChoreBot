@@ -52,6 +52,8 @@ class Chore(models.Model):
     completed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+'
     )
+    skipped = models.BooleanField(default=False, help_text='Closed without being done; completed_at is when.')
+    moved_by_hand = models.BooleanField(default=False, help_text='Due date set by hand; frequency changes keep it.')
 
     class Meta:
         ordering = ['due_date', 'template__area', 'template__title']
@@ -68,6 +70,7 @@ class Chore(models.Model):
 
     @property
     def is_done(self):
+        """Closed, whether done or skipped."""
         return self.completed_at is not None
 
 
@@ -106,6 +109,22 @@ class PickupSchedule(models.Model):
         """Earliest chore due date >= on_or_after, where due = pickup day (minus one for AM)."""
         lead = timedelta(days=1 if self.am_pickup else 0)
         return self.next_pickup_on_or_after(on_or_after + lead) - lead
+
+
+class AwayPeriod(models.Model):
+    """Days nobody is home: no notifications, pickups skipped, other chores moved to the day after."""
+
+    start = models.DateField()
+    end = models.DateField()
+
+    class Meta:
+        ordering = ['start']
+        constraints = [
+            models.CheckConstraint(condition=models.Q(end__gte=models.F('start')), name='away_end_not_before_start'),
+        ]
+
+    def __str__(self):
+        return f'Away {self.start} to {self.end}'
 
 
 class NotificationLog(models.Model):

@@ -1,4 +1,7 @@
-"""Morning digest and evening nudge for overdue and due-today chores, sent through Apprise."""
+"""Morning digest and evening nudge for overdue and due-today chores, sent through Apprise.
+
+Nothing is sent on away days.
+"""
 
 import logging
 from datetime import time
@@ -9,7 +12,7 @@ from django.db import IntegrityError
 from django.utils import timezone
 
 from .models import Chore, NotificationLog
-from .services import generate_due_chores
+from .services import generate_due_chores, is_away
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +90,8 @@ def send_due_notification(now=None):
     now = timezone.localtime(now)
     kind = due_slot(now)
     if kind is None or NotificationLog.objects.filter(kind=kind, date=now.date()).exists():
+        return None
+    if is_away(now.date()):
         return None
     try:
         # Claim the slot first so two notifiers can't both send it.

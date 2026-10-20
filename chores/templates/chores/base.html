@@ -89,6 +89,8 @@
     .button.suggested { background: var(--accent); color: var(--on-accent); }
     .button.suggested:hover { background: color-mix(in srgb, var(--accent) 88%, var(--fg)); }
     .button.pill { border-radius: 9999px; padding: 10px 32px; }
+    .button.destructive { background: var(--late); color: #fff; }
+    .button.destructive:hover { background: color-mix(in srgb, var(--late) 88%, var(--fg)); }
     .button.icon-only { width: 34px; padding: 0; }
 
     /* Linked toggle buttons (view switcher / segmented choice) */
@@ -216,6 +218,7 @@
             <div class="menu-separator"></div>
             <a class="menu-item" role="menuitem" href="{% url 'chores:new_task' %}">New Task…</a>
             <a class="menu-item" role="menuitem" href="{% url 'chores:pickup_setup' %}">Pickup Schedule</a>
+            <a class="menu-item" role="menuitem" href="{% url 'chores:away' %}">Away</a>
             {% if user.is_superuser %}
               <a class="menu-item" role="menuitem" href="{% url 'chores:new_user' %}">New User…</a>
             {% endif %}
