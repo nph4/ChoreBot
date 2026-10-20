@@ -53,6 +53,7 @@ The goal is to generate SMART (Specific, Measurable, Assignable, Realistic, Time
   - popovers for assigning chores
   - pill-shaped primary buttons
   - a phone-friendly layout
+- **Installable.** ChoreBot has an app icon and a web app manifest, so Chrome and Edge offer to install it, and it opens in its own window. Browsers only allow this over HTTPS or on `localhost`. To install it on a phone, serve it over HTTPS; on iPhone use Share → Add to Home Screen. There's no offline mode: it needs the server.
 - **Light and dark style.** Uses the [Nord](https://www.nordtheme.com/) palette. Dark is the default. Switch in the main menu (Dark Style), and each browser remembers its own choice.
 - **Admin.** Chore templates, chores and pickup schedules are managed in the Django admin at `/admin/`.
 

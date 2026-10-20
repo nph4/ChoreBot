@@ -4,9 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}ChoreBot{% endblock %}</title>
+  <link rel="manifest" href="{% static 'chores/manifest.webmanifest' %}">
+  <link rel="icon" href="{% static 'chores/icons/icon.svg' %}" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="{% static 'chores/icons/apple-touch-icon.png' %}">
+  <meta name="theme-color" content="#3b4252">
   <script>
-    // Apply the saved theme before first paint; dark is the default.
+    // Apply the saved theme before first paint; dark is the default. theme-color (the
+    // installed app's title bar) matches the header bar.
     try { if (localStorage.getItem('theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) {}
+    if (document.documentElement.dataset.theme === 'light') document.querySelector('meta[name="theme-color"]').content = '#e5e9f0';
   </script>
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
   <link rel="preload" href="{% static 'chores/fonts/AdwaitaSans-Regular.woff2' %}" as="font" type="font/woff2" crossorigin>
@@ -255,7 +261,10 @@
   <script>
     (function () {
       var root = document.documentElement, toggle = document.getElementById('theme-toggle');
-      function sync() { toggle.setAttribute('aria-pressed', root.dataset.theme === 'dark'); }
+      function sync() {
+        toggle.setAttribute('aria-pressed', root.dataset.theme === 'dark');
+        document.querySelector('meta[name="theme-color"]').content = root.dataset.theme === 'dark' ? '#3b4252' : '#e5e9f0';
+      }
       toggle.addEventListener('click', function () {
         root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
         try { localStorage.setItem('theme', root.dataset.theme); } catch (e) {}

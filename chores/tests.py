@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime, timedelta
 from unittest import mock
 
@@ -439,6 +440,21 @@ class StaticFilesTests(TestCase):
         response = self.client.get('/static/chores/fonts/AdwaitaSans-Regular.woff2')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'font/woff2')
+
+    @override_settings(WHITENOISE_USE_FINDERS=True)
+    def test_manifest_and_icons(self):
+        response = self.client.get('/static/chores/manifest.webmanifest')
+        self.assertEqual(response.status_code, 200)
+        manifest = json.loads(b''.join(response.streaming_content))
+        self.assertEqual((manifest['start_url'], manifest['display']), ('/', 'standalone'))
+        for icon in manifest['icons']:
+            self.assertEqual(self.client.get(f'/static/chores/{icon["src"]}').status_code, 200, icon['src'])
+        self.assertIn('maskable', [icon.get('purpose') for icon in manifest['icons']])
+
+    def test_pages_link_manifest_and_icons(self):
+        response = self.client.get(reverse('login'))
+        for path in ('chores/manifest.webmanifest', 'chores/icons/icon.svg', 'chores/icons/apple-touch-icon.png'):
+            self.assertContains(response, f'/static/{path}')
 
 
 @override_settings(NOTIFY_URLS=['json://localhost'], NOTIFY_MORNING_AT='08:00', NOTIFY_EVENING_AT='19:00')

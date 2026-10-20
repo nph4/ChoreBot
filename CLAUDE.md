@@ -44,6 +44,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Popovers and menus: `details.popover-menu` > `.popover`, with `.menu-item` entries.
   - Labels follow GNOME's capitalization rules: headings and buttons use header capitalization, everything else uses sentence case.
   - Popovers are `<details>` elements. A script in `base.html` closes them on an outside click or Escape.
+- **App icon:** `chores/static/chores/icons/icon.svg` is the source. The PNGs were exported from it with headless Chrome (`--default-background-color=00000000 --window-size=N,N --screenshot`, loading an HTML page that shows the SVG at N px). The maskable and Apple versions use the SVG without the rounded corners (no `rx`). Re-export them all if the SVG changes. Icon paths in `manifest.webmanifest` are relative to it and aren't rewritten to hashed names; WhiteNoise also serves the unhashed copies, so they still resolve.
 - **Previewing pages without the browser extension:** render a view through `RequestFactory(HTTP_HOST='localhost')` in `manage.py shell`, save the HTML, then run `google-chrome --headless=new --screenshot`.
 
 ## Environment gotchas
