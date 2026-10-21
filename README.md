@@ -17,12 +17,16 @@ The goal is to generate SMART (Specific, Measurable, Assignable, Realistic, Time
 
   Chores are generated from these templates by rules, with no AI.
 - **Today dashboard.** Lists Overdue, Due today and Coming up (next 7 days), with an Everyone/Mine filter. Marking a chore done schedules the next one straight away. A toast with **Undo** follows Done and Skip for 10 seconds; undoing reopens the chore as it was and drops the next one it scheduled. The server accepts an undo for up to 10 minutes after the chore was closed, and only for that chore's most recent occurrence.
+- **Spreading the load.** Three things keep any one day from piling up, using each chore's estimated minutes:
+  - **Lighter days.** When a chore that repeats weekly or less often is done or skipped, its next due date may slide up to 15% of the repeat interval later (a day for weekly chores, four for monthly) onto the day with the fewest minutes already due. Daily chores, Weekdays chores, bins and a new chore's first due date never slide.
+  - **Spread Out.** The Overdue heading has a **Spread Out** button: give it a number of minutes a day (60 by default) and it moves everyone's overdue chores, oldest first, onto the earliest days from today that still have room. A chore only moves within the next 7 days and within its own repeat interval; if there's no room it goes on the lightest of those days. Daily chores and bins stay where they are, and away days are skipped. There's no Undo, but Move To still works on each chore.
+  - **I have N minutes.** Next to Everyone/Mine, pick **15**, **30** or **60 min** to see just the overdue and due-today chores that fit in that time, oldest first. The choice stays as you tick chores off; **All** goes back to the full lists.
 - **Calendar.** A month view, opened from the main menu (☰ → Calendar). It shows:
   - open chores, with overdue ones in red
   - chores already done or skipped, on the day they were done or skipped
   - **projected repeats**, outlined: future occurrences worked out from each chore's repeat rule
 
-  Projections assume each chore is done on time. Pickup projections follow the pickup schedule. Everyone/Mine works here too, and on a phone the month turns into a list of only the days that have chores.
+  Projections assume each chore is done on time and don't slide onto lighter days, so a repeat may land a day or so later than shown. Pickup projections follow the pickup schedule. Everyone/Mine works here too, and on a phone the month turns into a list of only the days that have chores.
 - **Custom tasks.** ☰ → New Task… adds your own chore. It has:
   - title, area and what "done" looks like
   - estimated minutes

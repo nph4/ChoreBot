@@ -1,6 +1,6 @@
 <li class="row">
-  <form method="post" action="{% url 'chores:mark_done' chore.pk %}?who={{ who }}"
-        hx-post="{% url 'chores:mark_done' chore.pk %}?who={{ who }}" hx-target="#chore-lists">
+  <form method="post" action="{% url 'chores:mark_done' chore.pk %}?{{ list_query }}"
+        hx-post="{% url 'chores:mark_done' chore.pk %}?{{ list_query }}" hx-target="#chore-lists">
     {% csrf_token %}
     <button type="submit" class="check" aria-label="Mark “{{ chore.template.title }}” done" title="Mark Done">
       <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.3 3.3 6 10.6 2.7 7.3 1.3 8.7 6 13.4l8.7-8.7z"/></svg>
@@ -22,8 +22,8 @@
     </summary>
     <div class="popover">
       <div class="heading">Assign To</div>
-      <form class="stack" method="post" action="{% url 'chores:assign' chore.pk %}?who={{ who }}"
-            hx-post="{% url 'chores:assign' chore.pk %}?who={{ who }}" hx-target="#chore-lists">
+      <form class="stack" method="post" action="{% url 'chores:assign' chore.pk %}?{{ list_query }}"
+            hx-post="{% url 'chores:assign' chore.pk %}?{{ list_query }}" hx-target="#chore-lists">
         {% csrf_token %}
         <label class="visually-hidden" for="assignee-{{ chore.pk }}">Assign to</label>
         <select name="assignee" id="assignee-{{ chore.pk }}">
@@ -43,16 +43,16 @@
     </summary>
     <div class="popover" role="menu">
       {% if not chore.template.is_one_off %}
-        <form method="post" action="{% url 'chores:skip' chore.pk %}?who={{ who }}"
-              hx-post="{% url 'chores:skip' chore.pk %}?who={{ who }}" hx-target="#chore-lists">
+        <form method="post" action="{% url 'chores:skip' chore.pk %}?{{ list_query }}"
+              hx-post="{% url 'chores:skip' chore.pk %}?{{ list_query }}" hx-target="#chore-lists">
           {% csrf_token %}
           <button type="submit" class="menu-item" role="menuitem">Skip This One</button>
         </form>
         <div class="menu-separator"></div>
       {% endif %}
       <div class="heading">Move To</div>
-      <form class="stack" method="post" action="{% url 'chores:move' chore.pk %}?who={{ who }}"
-            hx-post="{% url 'chores:move' chore.pk %}?who={{ who }}" hx-target="#chore-lists">
+      <form class="stack" method="post" action="{% url 'chores:move' chore.pk %}?{{ list_query }}"
+            hx-post="{% url 'chores:move' chore.pk %}?{{ list_query }}" hx-target="#chore-lists">
         {% csrf_token %}
         <label class="visually-hidden" for="move-{{ chore.pk }}">New due date</label>
         <input type="date" name="due_date" id="move-{{ chore.pk }}" value="{{ chore.due_date|date:"Y-m-d" }}" required>

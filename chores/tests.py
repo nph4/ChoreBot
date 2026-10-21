@@ -12,7 +12,8 @@ from .models import AwayPeriod, Chore, ChoreTemplate, NotificationLog, PickupSch
 from .notifications import send, send_due_notification
 from .services import (
     add_away_period, calendar_entries, complete_chore, enable_template, generate_due_chores, next_due_date,
-    remove_template, save_pickup_schedules, skip_chore, update_template,
+    remove_template, save_pickup_schedules, skip_chore, slide_to_lighter_day, spread_overdue, suggest_chores,
+    update_template,
 )
 
 
@@ -1112,3 +1113,161 @@ class SeasonTests(TestCase):
         name = ChoreTemplate.MONTH_NAMES[next_month - 1]
         response = self.client.get(reverse('chores:chore_list'))
         self.assertContains(response, f'{name} (back in {name})')
+
+
+class SpreadTheLoadTests(TestCase):
+    today = date(2027, 6, 1)
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('alex', password='pw')
+        self.client.force_login(self.user)
+
+    def load(self, day, minutes, title='Other'):
+        """An open chore of `minutes` due on `day`."""
+        template = make_template(title=title, every_days=30, estimated_minutes=minutes)
+        return Chore.objects.create(template=template, due_date=day)
+
+    def done_on(self, template, day):
+        Chore.objects.create(template=template, due_date=day,
+                             completed_at=timezone.make_aware(datetime(day.year, day.month, day.day, 12)))
+
+    def test_slide_goes_to_lightest_day_in_window(self):
+        template = make_template(title='Mop', every_days=14)
+        self.done_on(template, self.today)
+        due = self.today + timedelta(days=14)
+        self.load(due, 30)
+        self.load(due + timedelta(days=1), 10, 'Other 2')
+        self.load(due + timedelta(days=3), 0, 'Out of window')
+        generate_due_chores(self.today)
+        self.assertEqual(template.chores.get(completed_at__isnull=True).due_date, due + timedelta(days=2))
+
+    def test_slide_window_is_15_percent_of_interval(self):
+        for every_days, slack in [(6, 0), (7, 1), (14, 2), (30, 4)]:
+            template = make_template(title=f'Every {every_days}', every_days=every_days)
+            due = self.today + timedelta(days=every_days)
+            busy = [self.load(due + timedelta(days=i), 60, f'Busy {every_days} {i}') for i in range(slack)]
+            self.assertEqual(slide_to_lighter_day(template, due), due + timedelta(days=slack))
+            for chore in busy:
+                chore.template.delete()
+
+    def test_ties_keep_the_rule_date(self):
+        template = make_template(title='Mop', every_days=14)
+        due = self.today + timedelta(days=14)
+        self.assertEqual(slide_to_lighter_day(template, due), due)
+
+    def test_no_slide_for_first_chore_daily_and_fixed_days(self):
+        self.load(self.today, 60)
+        first = make_template(title='New', every_days=30)
+        daily = make_template(title='Dishes', every_days=1)
+        self.done_on(daily, self.today - timedelta(days=1))
+        saturdays = make_template(title='Mow', every_days=None, weekdays='5', start_date=self.today)
+        self.done_on(saturdays, self.today - timedelta(days=3))  # Sat 29 May
+        generate_due_chores(self.today)
+        self.assertEqual(first.chores.get().due_date, self.today)
+        self.assertEqual(daily.chores.get(completed_at__isnull=True).due_date, self.today)
+        self.assertEqual(saturdays.chores.get(completed_at__isnull=True).due_date, date(2027, 6, 5))
+
+    def test_no_slide_for_pickups(self):
+        save_pickup_schedules({PickupSchedule.GARBAGE: (1, date(2027, 6, 8), False)})
+        template = PickupSchedule.objects.get().template
+        template.chores.all().delete()
+        self.done_on(template, self.today)
+        self.load(date(2027, 6, 8), 60)
+        generate_due_chores(self.today)
+        self.assertEqual(template.chores.get(completed_at__isnull=True).due_date, date(2027, 6, 8))
+
+    def test_slide_skips_away_days(self):
+        template = make_template(title='Mop', every_days=14)
+        self.done_on(template, self.today)
+        due = self.today + timedelta(days=14)
+        self.load(due, 30)
+        AwayPeriod.objects.create(start=due + timedelta(days=1), end=due + timedelta(days=1))
+        self.load(due + timedelta(days=2), 20, 'Other 2')
+        generate_due_chores(self.today)
+        self.assertEqual(template.chores.get(completed_at__isnull=True).due_date, due + timedelta(days=2))
+
+    def overdue(self, title, minutes, days_ago, every_days=7):
+        template = make_template(title=title, every_days=every_days, estimated_minutes=minutes)
+        return Chore.objects.create(template=template, due_date=self.today - timedelta(days=days_ago))
+
+    def test_spread_fills_days_under_budget(self):
+        a = self.overdue('A', 40, 5)
+        b = self.overdue('B', 30, 3)
+        c = self.overdue('C', 30, 2, every_days=30)
+        dishes = self.overdue('Dishes', 10, 1, every_days=1)
+        self.assertEqual(spread_overdue(60, self.today), (3, 2))
+        for chore in (a, b, c, dishes):
+            chore.refresh_from_db()
+        tomorrow = self.today + timedelta(days=1)
+        self.assertEqual([a.due_date, b.due_date, c.due_date], [self.today, tomorrow, tomorrow])
+        self.assertEqual(dishes.due_date, self.today - timedelta(days=1))  # daily chores stay put
+
+    def test_spread_counts_chores_already_due(self):
+        self.load(self.today, 50)
+        a = self.overdue('A', 20, 2)
+        spread_overdue(60, self.today)
+        a.refresh_from_db()
+        self.assertEqual(a.due_date, self.today + timedelta(days=1))
+
+    def test_spread_stays_within_interval_and_a_week(self):
+        often = self.overdue('Every 2 days', 30, 1, every_days=2)
+        self.load(self.today, 40)
+        spread_overdue(10, self.today)  # no room anywhere: lightest day of its 2-day window
+        often.refresh_from_db()
+        self.assertEqual(often.due_date, self.today + timedelta(days=1))
+
+        rare = self.overdue('Monthly', 30, 1, every_days=30)
+        for i in range(7):
+            self.load(self.today + timedelta(days=i), 100 - i, f'Busy {i}')
+        spread_overdue(10, self.today)
+        rare.refresh_from_db()
+        self.assertEqual(rare.due_date, self.today + timedelta(days=6))
+
+    def test_spread_skips_away_days_and_leaves_bins(self):
+        save_pickup_schedules({PickupSchedule.GARBAGE: (1, date(2027, 6, 8), False)})
+        bin_chore = PickupSchedule.objects.get().template.chores.get()
+        bin_chore.due_date = self.today - timedelta(days=6)
+        bin_chore.save()
+        AwayPeriod.objects.create(start=self.today, end=self.today)
+        a = self.overdue('A', 20, 2)
+        spread_overdue(60, self.today)
+        a.refresh_from_db()
+        bin_chore.refresh_from_db()
+        self.assertEqual(a.due_date, self.today + timedelta(days=1))
+        self.assertEqual(bin_chore.due_date, self.today - timedelta(days=6))
+
+    def test_suggest_takes_what_fits_in_order(self):
+        chores = [self.overdue('A', 20, 3), self.overdue('B', 15, 2), self.overdue('C', 10, 1)]
+        self.assertEqual(suggest_chores(chores, 30), [chores[0], chores[2]])
+
+    def test_dashboard_suggests_for_mine(self):
+        today = timezone.localdate()
+        other = get_user_model().objects.create_user('sam', password='pw')
+        mine = Chore.objects.create(template=make_template(title='Mine', estimated_minutes=10), due_date=today,
+                                    assignee=self.user)
+        Chore.objects.create(template=make_template(title='Theirs', estimated_minutes=10), due_date=today,
+                             assignee=other)
+        Chore.objects.create(template=make_template(title='Too long', estimated_minutes=40), due_date=today,
+                             assignee=self.user)
+        response = self.client.get(reverse('chores:dashboard'), {'who': 'mine', 'have': '30'})
+        self.assertEqual(response.context['suggested'], [mine])
+        self.assertContains(response, '1 chore · ~10 of 30 min')
+        self.assertNotContains(response, 'Coming Up')
+
+    def test_unknown_minutes_are_ignored(self):
+        response = self.client.get(reverse('chores:dashboard'), {'have': '45'})
+        self.assertIsNone(response.context['have'])
+
+    def test_row_actions_keep_the_minutes(self):
+        chore = Chore.objects.create(template=make_template(), due_date=timezone.localdate(), assignee=self.user)
+        response = self.client.post(reverse('chores:mark_done', args=[chore.pk]) + '?who=mine&have=30')
+        self.assertRedirects(response, reverse('chores:dashboard') + '?who=mine&have=30')
+        response = self.client.post(reverse('chores:undo', args=[chore.pk]) + '?who=mine&have=30',
+                                    HTTP_HX_REQUEST='true')
+        self.assertContains(response, 'have=30')
+
+    def test_spread_view(self):
+        self.overdue('A', 20, 2).template.chores.update(due_date=timezone.localdate() - timedelta(days=2))
+        response = self.client.post(reverse('chores:spread'), {'budget': 60}, HTTP_HX_REQUEST='true')
+        self.assertContains(response, 'Spread 1 chore over 1 day')
+        self.assertEqual(self.client.post(reverse('chores:spread'), {'budget': 0}).status_code, 400)

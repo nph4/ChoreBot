@@ -128,19 +128,55 @@ def drop_out_of_season_chores(today):
             chore.delete()
 
 
+SLIDE_SHARE = 0.15
+
+
+def day_loads(start, end):
+    """Minutes of open chores due on each day from start to end, keyed by date."""
+    loads = {}
+    for due, minutes in Chore.objects.filter(
+        completed_at__isnull=True, template__active=True, due_date__range=(start, end)
+    ).values_list('due_date', 'template__estimated_minutes'):
+        loads[due] = loads.get(due, 0) + minutes
+    return loads
+
+
+def slide_to_lighter_day(template, due):
+    """Move a repeat's due date up to SLIDE_SHARE of its interval later, onto the day with the fewest minutes due.
+
+    Ties go to the earliest day. Away and out-of-season days aren't candidates.
+    Chores repeating more often than weekly (and fixed-day chores) never slide.
+    """
+    slack = int((template.every_days or 0) * SLIDE_SHARE)
+    if slack == 0:
+        return due
+    periods = away_periods(due)
+    loads = day_loads(due, due + timedelta(days=slack))
+    days = [due + timedelta(days=i) for i in range(slack + 1)]
+    days = [day for day in days if settle_due_date(template, day, None, periods) == day] or [due]
+    return min(days, key=lambda day: (loads.get(day, 0), day))
+
+
 def generate_due_chores(today=None):
     """Create an open Chore for every active template that lacks one. Safe to call repeatedly.
 
     Open chores left over from a season that has ended are dropped first, so they're rescheduled for the next one.
+    A repeat of a chore that has been done or skipped before may slide onto a lighter day (slide_to_lighter_day).
     """
     today = today or timezone.localdate()
     drop_out_of_season_chores(today)
     created = []
     has_open = Chore.objects.filter(template=OuterRef('pk'), completed_at__isnull=True)
-    for template in ChoreTemplate.objects.filter(active=True).exclude(Exists(has_open)):
+    has_closed = Chore.objects.filter(template=OuterRef('pk'), completed_at__isnull=False)
+    pickup_ids = set(PickupSchedule.objects.values_list('template_id', flat=True))
+    for template in ChoreTemplate.objects.filter(active=True).exclude(Exists(has_open)).annotate(
+        repeat=Exists(has_closed)
+    ):
         due_date = next_due_date(template, today)
         if due_date is None:
             continue
+        if template.repeat and template.pk not in pickup_ids:
+            due_date = slide_to_lighter_day(template, due_date)
         try:
             with transaction.atomic():
                 created.append(
@@ -311,6 +347,65 @@ def update_template(template, *, title, area, done_when, estimated_minutes, assi
                 open_chore.due_date = not_before_today(template, due, today)
                 open_chore.save(update_fields=['due_date'])
     generate_due_chores(today)  # e.g. a finished one-off that now repeats
+
+
+def _interval_days(template):
+    """Roughly how many days apart a template's chores are due."""
+    if template.every_days:
+        return template.every_days
+    if template.weekdays:
+        return max(1, 7 * template.every_weeks // len(template.weekdays))
+    return 7  # one-off
+
+
+@transaction.atomic
+def spread_overdue(budget, today=None):
+    """Move overdue chores onto the coming days, keeping each day under `budget` minutes where possible.
+
+    Oldest first (then the most frequent). Each goes on the earliest day from
+    today with room, counting chores already due then. A chore only moves within
+    the next 7 days and within its own interval; with no room there it goes on
+    the lightest of those days. Daily chores and bins stay where they are, and
+    away days are skipped. Returns (chores moved, days used).
+    """
+    today = today or timezone.localdate()
+    pickup_ids = set(PickupSchedule.objects.values_list('template_id', flat=True))
+    loads = day_loads(today, today + timedelta(days=6))
+    to_spread = []
+    for chore in Chore.objects.filter(
+        completed_at__isnull=True, template__active=True, due_date__lt=today
+    ).select_related('template'):
+        if chore.template_id in pickup_ids or chore.template.every_days == 1:
+            loads[today] = loads.get(today, 0) + chore.template.estimated_minutes  # still today's work
+        else:
+            to_spread.append(chore)
+    to_spread.sort(key=lambda c: (c.due_date, _interval_days(c.template)))
+
+    periods = away_periods(today)
+    days_used = set()
+    for chore in to_spread:
+        template, minutes = chore.template, chore.template.estimated_minutes
+        window = [today + timedelta(days=i) for i in range(min(_interval_days(template), 7))]
+        window = [day for day in window if settle_due_date(template, day, None, periods) == day]
+        if not window:
+            continue
+        day = next((d for d in window if loads.get(d, 0) + minutes <= budget), None)
+        day = day or min(window, key=lambda d: (loads.get(d, 0), d))
+        loads[day] = loads.get(day, 0) + minutes
+        chore.due_date = day
+        chore.save(update_fields=['due_date'])
+        days_used.add(day)
+    return sum(1 for c in to_spread if c.due_date >= today), len(days_used)
+
+
+def suggest_chores(chores, minutes):
+    """The chores to do in `minutes`, taken in the given order, skipping any that no longer fit."""
+    picked = []
+    for chore in chores:
+        if chore.template.estimated_minutes <= minutes:
+            picked.append(chore)
+            minutes -= chore.template.estimated_minutes
+    return picked
 
 
 @transaction.atomic

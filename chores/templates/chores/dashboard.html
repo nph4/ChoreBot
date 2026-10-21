@@ -19,10 +19,17 @@
 {% endblock %}
 
 {% block content %}
-  <nav class="switcher" aria-label="Show chores for">
-    <div class="linked">
-      <a class="button toggle{% if who == "everyone" %} current{% endif %}" href="?who=everyone"{% if who == "everyone" %} aria-current="page"{% endif %}>Everyone</a>
-      <a class="button toggle{% if who == "mine" %} current{% endif %}" href="?who=mine"{% if who == "mine" %} aria-current="page"{% endif %}>Mine</a>
+  <nav class="switcher" aria-label="Filter chores">
+    <div class="linked" role="group" aria-label="Show chores for">
+      <a class="button toggle{% if who == "everyone" %} current{% endif %}" href="?who=everyone{% if have %}&have={{ have }}{% endif %}"{% if who == "everyone" %} aria-current="page"{% endif %}>Everyone</a>
+      <a class="button toggle{% if who == "mine" %} current{% endif %}" href="?who=mine{% if have %}&have={{ have }}{% endif %}"{% if who == "mine" %} aria-current="page"{% endif %}>Mine</a>
+    </div>
+    <div class="linked" role="group" aria-label="Time you have">
+      <a class="button toggle{% if not have %} current{% endif %}" href="?who={{ who }}"{% if not have %} aria-current="page"{% endif %}>All</a>
+      {% for minutes in have_choices %}
+        <a class="button toggle{% if have == minutes %} current{% endif %}" href="?who={{ who }}&have={{ minutes }}"
+           title="I Have {{ minutes }} Minutes"{% if have == minutes %} aria-current="page"{% endif %}>{{ minutes }} min</a>
+      {% endfor %}
     </div>
   </nav>
   <div id="chore-lists">

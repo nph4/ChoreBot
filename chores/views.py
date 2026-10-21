@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse, HttpResponseBadRequest
+from django.utils.http import urlencode
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -15,20 +16,31 @@ from django.db.models import Exists, OuterRef
 from django.utils import formats, timezone
 from django.views.decorators.http import require_POST
 
-from .forms import AssignForm, AwayForm, EditTaskForm, MoveForm, NewUserForm, PickupSetupForm, ScheduleForm, TaskForm
+from .forms import (
+    AssignForm, AwayForm, EditTaskForm, MoveForm, NewUserForm, PickupSetupForm, ScheduleForm, SpreadForm, TaskForm,
+)
 from .models import AwayPeriod, Chore, ChoreTemplate, PickupSchedule
 from .services import (
     active_pickup_schedules, add_away_period, assign_chore, calendar_entries, complete_chore, create_task,
     enable_template, generate_due_chores, move_chore, remove_template, save_pickup_schedules, skip_chore,
-    undo_close, update_template,
+    spread_overdue, suggest_chores, undo_close, update_template,
 )
 
 UPCOMING_DAYS = 7
+HAVE_MINUTES = [15, 30, 60]
+
+
+def _list_query(request):
+    """The Today page's filters from the query string: (who, have, query string to carry them along)."""
+    who = 'mine' if request.GET.get('who') == 'mine' else 'everyone'
+    have = request.GET.get('have')
+    have = int(have) if have in {str(m) for m in HAVE_MINUTES} else None
+    return who, have, urlencode({'who': who, **({'have': have} if have else {})})
 
 
 def _list_context(request):
     today = timezone.localdate()
-    who = 'mine' if request.GET.get('who') == 'mine' else 'everyone'
+    who, have, list_query = _list_query(request)
     chores = Chore.objects.filter(
         completed_at__isnull=True,
         template__active=True,
@@ -36,28 +48,40 @@ def _list_context(request):
     ).select_related('template', 'assignee')
     if who == 'mine':
         chores = chores.filter(assignee=request.user)
-    return {
+    context = {
         'who': who,
+        'have': have,
+        'have_choices': HAVE_MINUTES,
+        'list_query': list_query,
         'overdue': [c for c in chores if c.due_date < today],
         'due_today': [c for c in chores if c.due_date == today],
         'upcoming': [c for c in chores if c.due_date > today],
         'members': get_user_model().objects.filter(is_active=True).order_by('username'),
     }
+    if have:
+        suggested = suggest_chores(context['overdue'] + context['due_today'], have)
+        context['suggested'] = suggested
+        context['suggested_minutes'] = sum(c.template.estimated_minutes for c in suggested)
+    return context
 
 
-def _lists_response(request, closed=None):
+def _lists_response(request, closed=None, notice=None):
     """After a row action: the refreshed lists for htmx, or a redirect back to the dashboard.
 
     The htmx response also replaces the toast area out of band: with an Undo toast
-    when `closed` (a chore just done or skipped) is given, otherwise empty.
+    when `closed` (a chore just done or skipped) is given, a plain toast for
+    `notice`, otherwise empty. Without htmx, `notice` becomes a message.
     """
     if request.headers.get('HX-Request'):
         context = _list_context(request)
         html = render_to_string('chores/_chore_lists.html', context, request=request)
-        html += render_to_string('chores/_undo_toast.html', {**context, 'closed': closed}, request=request)
+        html += render_to_string(
+            'chores/_undo_toast.html', {**context, 'closed': closed, 'notice': notice}, request=request
+        )
         return HttpResponse(html)
-    who = 'mine' if request.GET.get('who') == 'mine' else 'everyone'
-    return redirect(f"{reverse('chores:dashboard')}?who={who}")
+    if notice:
+        messages.success(request, notice)
+    return redirect(f"{reverse('chores:dashboard')}?{_list_query(request)[2]}")
 
 
 @login_required
@@ -117,6 +141,20 @@ def move(request, pk):
         return HttpResponseBadRequest('Enter a valid date.')
     move_chore(chore, form.cleaned_data['due_date'])
     return _lists_response(request)
+
+
+@login_required
+@require_POST
+def spread(request):
+    form = SpreadForm(request.POST)
+    if not form.is_valid():
+        return HttpResponseBadRequest('Enter minutes a day, 5 to 600.')
+    moved, days = spread_overdue(form.cleaned_data['budget'])
+    if moved:
+        notice = f'Spread {moved} chore{"s" if moved != 1 else ""} over {days} day{"s" if days != 1 else ""}'
+    else:
+        notice = 'Nothing to spread out'
+    return _lists_response(request, notice=notice)
 
 
 def _template_rows():

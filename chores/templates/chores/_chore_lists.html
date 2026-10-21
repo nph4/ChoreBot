@@ -1,6 +1,31 @@
+{% if have %}
+  <section class="group">
+    <h2 class="heading">Suggested <span class="dim caption">{{ suggested|length }} chore{{ suggested|length|pluralize }} · ~{{ suggested_minutes }} of {{ have }} min</span></h2>
+    <ul class="boxed-list">
+      {% for chore in suggested %}{% include "chores/_chore_row.html" %}{% empty %}
+        <li class="row placeholder">{% if overdue or due_today %}Nothing fits in {{ have }} minutes{% else %}Nothing due today{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+{% else %}
 {% if overdue %}
   <section class="group">
-    <h2 class="heading destructive">Overdue</h2>
+    <div class="heading-bar">
+      <h2 class="heading destructive">Overdue</h2>
+      <details class="popover-menu">
+        <summary class="button flat">Spread Out</summary>
+        <div class="popover">
+          <div class="heading">Spread Out</div>
+          <form class="stack" method="post" action="{% url 'chores:spread' %}?{{ list_query }}"
+                hx-post="{% url 'chores:spread' %}?{{ list_query }}" hx-target="#chore-lists">
+            {% csrf_token %}
+            <div class="dim caption">Moves everyone's overdue chores onto the next 7 days.</div>
+            <label class="check-label">Minutes a day <input type="number" name="budget" value="60" min="5" max="600" required></label>
+            <button type="submit" class="button suggested">Spread</button>
+          </form>
+        </div>
+      </details>
+    </div>
     <ul class="boxed-list">{% for chore in overdue %}{% include "chores/_chore_row.html" %}{% endfor %}</ul>
   </section>
 {% endif %}
@@ -18,3 +43,4 @@
     {% for chore in upcoming %}{% include "chores/_chore_row.html" %}{% empty %}<li class="row placeholder">Nothing in the next 7 days</li>{% endfor %}
   </ul>
 </section>
+{% endif %}

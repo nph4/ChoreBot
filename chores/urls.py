@@ -11,6 +11,7 @@ urlpatterns = [
     path('chores/<int:pk>/skip/', views.skip, name='skip'),
     path('chores/<int:pk>/undo/', views.undo, name='undo'),
     path('chores/<int:pk>/move/', views.move, name='move'),
+    path('chores/spread/', views.spread, name='spread'),
     path('tasks/<int:pk>/edit/', views.edit_template, name='edit_task'),
     path('tasks/<int:pk>/remove/', views.remove, name='remove_task'),
     path('away/', views.away, name='away'),

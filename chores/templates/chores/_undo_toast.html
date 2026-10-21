@@ -2,11 +2,13 @@
   {% if closed %}
     <div class="toast with-action">
       <span>“{{ closed.template.title }}” {% if closed.skipped %}skipped{% else %}done{% endif %}</span>
-      <form method="post" action="{% url 'chores:undo' closed.pk %}?who={{ who }}"
-            hx-post="{% url 'chores:undo' closed.pk %}?who={{ who }}" hx-target="#chore-lists">
+      <form method="post" action="{% url 'chores:undo' closed.pk %}?{{ list_query }}"
+            hx-post="{% url 'chores:undo' closed.pk %}?{{ list_query }}" hx-target="#chore-lists">
         {% csrf_token %}
         <button type="submit" class="button flat">Undo</button>
       </form>
     </div>
+  {% elif notice %}
+    <div class="toast">{{ notice }}</div>
   {% endif %}
 </div>

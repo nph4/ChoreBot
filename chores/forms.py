@@ -210,6 +210,10 @@ class MoveForm(forms.Form):
     due_date = forms.DateField()
 
 
+class SpreadForm(forms.Form):
+    budget = forms.IntegerField(label='Minutes a day', min_value=5, max_value=600, initial=60)
+
+
 class AwayForm(forms.Form):
     start = forms.DateField(label='From', widget=forms.DateInput(attrs={'type': 'date'}))
     end = forms.DateField(label='Until', help_text='The last day you\'re away.', widget=forms.DateInput(attrs={'type': 'date'}))

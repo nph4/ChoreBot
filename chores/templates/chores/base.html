@@ -109,12 +109,15 @@
     .toggle.current, .toggle:has(input:checked) { background: var(--button-checked); font-weight: 700; }
     .toggle input { position: absolute; opacity: 0; pointer-events: none; }
     .toggle:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
-    .switcher { display: flex; justify-content: center; margin-bottom: 24px; }
+    .switcher { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-bottom: 24px; }
 
     /* Preferences-style groups and boxed lists */
     .group { margin-bottom: 24px; }
     .group > .heading { font-size: 1rem; font-weight: 700; margin: 0 0 12px; padding: 0 2px; }
-    .group > .heading.destructive { color: var(--late); }
+    .group > .heading.destructive, .heading-bar > .heading.destructive { color: var(--late); }
+    .heading .caption { font-weight: 400; }
+    .heading-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -6px 0 6px; }
+    .heading-bar > .heading { font-size: 1rem; font-weight: 700; margin: 0; padding: 0 2px; }
     .boxed-list {
       list-style: none; margin: 0; padding: 0;
       background: var(--card); border-radius: 12px;
