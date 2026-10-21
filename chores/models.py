@@ -1,7 +1,8 @@
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class ChoreTemplate(models.Model):
@@ -9,9 +10,11 @@ class ChoreTemplate(models.Model):
 
     every_days=None makes it a one-off: one chore is generated and, once completed, no more.
     weekdays makes it repeat on fixed days of the week instead (every_days is then None).
+    season_start/season_end limit it to a range of months, which may wrap past December.
     """
 
     WEEKDAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
     title = models.CharField(max_length=200)
     area = models.CharField(max_length=100, blank=True)
@@ -27,6 +30,10 @@ class ChoreTemplate(models.Model):
         default=1, help_text='With weekdays: every this many weeks, counted from the week of start_date.'
     )
     start_date = models.DateField(null=True, blank=True, help_text='First occurrence is due no earlier than this.')
+    season_start = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text='First month of the season, 1-12. Empty (with season_end) means all year.'
+    )
+    season_end = models.PositiveSmallIntegerField(null=True, blank=True, help_text='Last month of the season, 1-12.')
     default_assignee = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+'
     )
@@ -40,6 +47,11 @@ class ChoreTemplate(models.Model):
                 name='every_days_at_least_1',
             ),
             models.CheckConstraint(condition=models.Q(every_weeks__gte=1), name='template_every_weeks_at_least_1'),
+            models.CheckConstraint(
+                condition=models.Q(season_start__isnull=True, season_end__isnull=True)
+                | models.Q(season_start__range=(1, 12), season_end__range=(1, 12)),
+                name='season_months_both_or_neither',
+            ),
         ]
 
     def __str__(self):
@@ -60,6 +72,47 @@ class ChoreTemplate(models.Model):
             return f'Every {days}' if self.every_weeks == 1 else f'Every {self.every_weeks} weeks on {days}'
         names = {None: 'Once', 1: 'Daily', 7: 'Weekly', 30: 'Monthly'}
         return names.get(self.every_days, f'Every {self.every_days} days')
+
+    @property
+    def is_seasonal(self):
+        return self.season_start is not None
+
+    @property
+    def season_label(self):
+        if not self.is_seasonal:
+            return ''
+        start, end = self.MONTH_NAMES[self.season_start - 1], self.MONTH_NAMES[self.season_end - 1]
+        return start if start == end else f'{start}–{end}'
+
+    @property
+    def season_start_name(self):
+        return self.MONTH_NAMES[self.season_start - 1] if self.is_seasonal else ''
+
+    @property
+    def out_of_season_now(self):
+        return not self.in_season(timezone.localdate())
+
+    def in_season(self, day):
+        if not self.is_seasonal:
+            return True
+        start, end, month = self.season_start, self.season_end, day.month
+        return start <= month <= end if start <= end else (month >= start or month <= end)
+
+    def out_of_season_between(self, first, last):
+        """Whether any day from first to last (inclusive) is out of season."""
+        if not self.is_seasonal:
+            return False
+        year, month = first.year, first.month
+        while (year, month) <= (last.year, last.month):
+            if not self.in_season(date(year, month, 1)):
+                return True
+            year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+        return False
+
+    def next_season_start(self, after):
+        """The first day of the season that starts after `after`."""
+        start = date(after.year, self.season_start, 1)
+        return start if start > after else date(after.year + 1, self.season_start, 1)
 
     def next_fixed_day(self, after):
         """First date strictly after `after` that falls on one of the weekdays, in a week that counts.

@@ -990,3 +990,125 @@ class FixedDayTests(TestCase):
         self.assertEqual(chore.due_date, next_weekday(self.today, 5))
         form = self.client.get(url).context['form']
         self.assertEqual((form['repeat'].value(), form['weekdays'].value()), ('weekdays', ['5']))
+
+
+def month_from(day, offset):
+    """The month number `offset` months after day's month (1-12)."""
+    return (day.month - 1 + offset) % 12 + 1
+
+
+class SeasonTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('alex', password='pw')
+        self.client.force_login(self.user)
+        self.today = timezone.localdate()
+
+    def seasonal(self, start, end, **kwargs):
+        return make_template(**{'title': 'Mow lawn', 'every_days': 7, 'season_start': start, 'season_end': end, **kwargs})
+
+    def test_in_season_and_labels(self):
+        summer = self.seasonal(4, 10)
+        self.assertTrue(summer.in_season(date(2026, 10, 31)))
+        self.assertFalse(summer.in_season(date(2026, 11, 1)))
+        self.assertEqual(summer.season_label, 'Apr–Oct')
+        self.assertEqual(summer.next_season_start(date(2026, 10, 20)), date(2027, 4, 1))
+        winter = self.seasonal(11, 2)
+        self.assertTrue(winter.in_season(date(2027, 1, 15)))
+        self.assertTrue(winter.in_season(date(2026, 12, 1)))
+        self.assertFalse(winter.in_season(date(2027, 3, 1)))
+        self.assertEqual(winter.next_season_start(date(2026, 10, 20)), date(2026, 11, 1))
+        self.assertEqual(self.seasonal(7, 7).season_label, 'Jul')
+        self.assertTrue(make_template().in_season(date(2026, 1, 1)))
+
+    def test_first_chore_waits_for_the_season(self):
+        self.seasonal(4, 10)
+        [chore] = generate_due_chores(date(2027, 2, 10))
+        self.assertEqual(chore.due_date, date(2027, 4, 1))
+
+    def test_fixed_days_land_on_a_chosen_day_in_season(self):
+        make_template(title='Mow lawn', every_days=None, weekdays='5', start_date=date(2027, 2, 1),
+                      season_start=4, season_end=10)
+        [chore] = generate_due_chores(date(2027, 2, 10))
+        self.assertEqual(chore.due_date, date(2027, 4, 3))  # the first Saturday in April
+
+    def test_next_after_season_end_moves_to_next_season(self):
+        template = self.seasonal(month_from(self.today, 0), month_from(self.today, 0), every_days=40)
+        [chore] = generate_due_chores()
+        complete_chore(chore, self.user)
+        self.assertEqual(template.chores.get(completed_at__isnull=True).due_date,
+                         date(self.today.year + 1, self.today.month, 1))
+
+    def test_overdue_chore_is_dropped_when_season_ends(self):
+        template = self.seasonal(4, 10)
+        old = Chore.objects.create(template=template, due_date=date(2027, 10, 20))
+        generate_due_chores(date(2027, 11, 2))
+        self.assertFalse(Chore.objects.filter(pk=old.pk).exists())
+        self.assertEqual(template.chores.get(completed_at__isnull=True).due_date, date(2028, 4, 1))
+
+    def test_overdue_chore_from_last_season_is_dropped_on_return(self):
+        template = self.seasonal(4, 10)
+        Chore.objects.create(template=template, due_date=date(2026, 10, 20),
+                             completed_at=timezone.make_aware(datetime(2026, 10, 10, 12)))
+        old = Chore.objects.create(template=template, due_date=date(2026, 10, 17))
+        generate_due_chores(date(2027, 4, 2))  # nobody opened the app all winter
+        self.assertFalse(Chore.objects.filter(pk=old.pk).exists())
+        self.assertEqual(template.chores.get(completed_at__isnull=True).due_date, date(2027, 4, 2))
+
+    def test_overdue_chore_in_season_is_kept(self):
+        template = self.seasonal(4, 10)
+        chore = Chore.objects.create(template=template, due_date=date(2027, 6, 1))
+        generate_due_chores(date(2027, 6, 9))
+        self.assertEqual(template.chores.get(completed_at__isnull=True), chore)
+
+    def test_season_and_away_dates_combine(self):
+        template = self.seasonal(4, 10)
+        AwayPeriod.objects.create(start=date(2027, 3, 30), end=date(2027, 4, 5))
+        self.assertEqual(next_due_date(template, date(2027, 3, 25)), date(2027, 4, 6))
+        AwayPeriod.objects.create(start=date(2027, 10, 28), end=date(2027, 11, 3))
+        self.assertEqual(next_due_date(template, date(2027, 10, 28)), date(2028, 4, 1))
+
+    def test_calendar_skips_off_season(self):
+        template = self.seasonal(4, 10)
+        Chore.objects.create(template=template, due_date=date(2027, 10, 25))
+        entries = calendar_entries(date(2027, 10, 1), date(2027, 11, 30), today=date(2027, 10, 25))
+        self.assertEqual(sorted(entries), [date(2027, 10, 25)])
+
+    def test_season_change_reschedules_open_chore(self):
+        template = make_template(title='Mow lawn', every_days=7)
+        [chore] = generate_due_chores()
+        next_month = month_from(self.today, 1)
+        update_template(template, title='Mow lawn', area='Yard', done_when='Grass cut', estimated_minutes=30,
+                        assignee=None, every_days=7, season_start=next_month, season_end=next_month)
+        chore.refresh_from_db()
+        self.assertEqual(chore.due_date, template.next_season_start(self.today))
+
+    def test_create_through_form(self):
+        response = self.client.post(reverse('chores:new_task'), {
+            'title': 'Clear gutters', 'done_when': 'Gutters clear', 'estimated_minutes': 60, 'repeat': 'monthly',
+            'season': 'seasonal', 'season_start': '11', 'season_end': '2', 'start_date': self.today.isoformat(),
+        })
+        self.assertRedirects(response, reverse('chores:dashboard'))
+        template = ChoreTemplate.objects.get(title='Clear gutters')
+        self.assertEqual((template.season_start, template.season_end), (11, 2))
+
+    def test_all_year_through_form_clears_months(self):
+        self.client.post(reverse('chores:new_task'), {
+            'title': 'Dust', 'done_when': 'No dust', 'estimated_minutes': 10, 'repeat': 'weekly',
+            'season': 'all', 'season_start': '4', 'season_end': '10', 'start_date': self.today.isoformat(),
+        })
+        template = ChoreTemplate.objects.get(title='Dust')
+        self.assertFalse(template.is_seasonal)
+
+    def test_form_needs_both_months(self):
+        response = self.client.post(reverse('chores:new_task'), {
+            'title': 'Mow lawn', 'done_when': 'Grass cut', 'estimated_minutes': 45, 'repeat': 'weekly',
+            'season': 'seasonal', 'season_start': '4', 'season_end': '', 'start_date': self.today.isoformat(),
+        })
+        self.assertContains(response, 'Pick a month.')
+
+    def test_chores_page_shows_season(self):
+        next_month = month_from(self.today, 1)
+        self.seasonal(next_month, next_month)
+        name = ChoreTemplate.MONTH_NAMES[next_month - 1]
+        response = self.client.get(reverse('chores:chore_list'))
+        self.assertContains(response, f'{name} (back in {name})')

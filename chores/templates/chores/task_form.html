@@ -6,6 +6,7 @@
 {% block extra_style %}
   #task-form .boxed-list:not(:has(input[name="repeat"][value="custom"]:checked)) .field-every_days,
   #task-form .boxed-list:not(:has(input[name="repeat"][value="weekdays"]:checked)) :is(.field-weekdays, .field-every_weeks) { display: none; }
+  #task-form .boxed-list:not(:has(input[name="season"][value="seasonal"]:checked)) :is(.field-season_start, .field-season_end) { display: none; }
 {% endblock %}
 
 {% block content %}

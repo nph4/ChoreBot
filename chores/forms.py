@@ -78,6 +78,7 @@ class ScheduleForm(forms.Form):
 
 
 REPEAT_DAYS = {'once': None, 'daily': 1, 'weekly': 7, 'monthly': 30}
+MONTH_CHOICES = [(i, name) for i, name in enumerate(ChoreTemplate.MONTH_NAMES, start=1)]
 
 
 class TaskForm(forms.Form):
@@ -107,6 +108,15 @@ class TaskForm(forms.Form):
         label='Every how many weeks?', min_value=1, max_value=52, initial=1, required=False,
         help_text='2 means every other week, counting from the due date.',
     )
+    season = forms.ChoiceField(
+        choices=[('all', 'All year'), ('seasonal', 'Seasonal')],
+        widget=forms.RadioSelect,
+        initial='all',
+        required=False,
+        help_text='Seasonal chores are only scheduled in the months you pick.',
+    )
+    season_start = forms.TypedChoiceField(label='From', choices=MONTH_CHOICES, coerce=int, required=False)
+    season_end = forms.TypedChoiceField(label='To', choices=MONTH_CHOICES, coerce=int, required=False)
     start_date = forms.DateField(label='Due', widget=forms.DateInput(attrs={'type': 'date'}))
     assignee = forms.ModelChoiceField(
         queryset=get_user_model().objects.filter(is_active=True).order_by('username'),
@@ -136,6 +146,12 @@ class TaskForm(forms.Form):
             cleaned['every_weeks'] = cleaned.get('every_weeks') or 1
         else:
             cleaned['weekdays'], cleaned['every_weeks'] = '', 1
+        if cleaned.get('season') == 'seasonal':
+            for name in ('season_start', 'season_end'):
+                if not cleaned.get(name):
+                    self.add_error(name, 'Pick a month.')
+        else:
+            cleaned['season_start'] = cleaned['season_end'] = None
         return cleaned
 
     def task_fields(self):
@@ -145,6 +161,7 @@ class TaskForm(forms.Form):
             'title': c['title'], 'area': c['area'], 'done_when': c['done_when'],
             'estimated_minutes': c['estimated_minutes'], 'every_days': c['every_days'],
             'weekdays': c['weekdays'], 'every_weeks': c['every_weeks'],
+            'season_start': c['season_start'], 'season_end': c['season_end'],
             'start_date': c['start_date'], 'assignee': c['assignee'],
         }
 
@@ -163,6 +180,8 @@ class EditTaskForm(TaskForm):
             'estimated_minutes': template.estimated_minutes, 'assignee': template.default_assignee,
             'repeat': repeat, 'every_days': every_days if repeat == 'custom' else None,
             'weekdays': list(template.weekdays), 'every_weeks': template.every_weeks,
+            'season': 'seasonal' if template.is_seasonal else 'all',
+            'season_start': template.season_start, 'season_end': template.season_end,
             'start_date': open_chore.due_date if open_chore else None,
         }
         super().__init__(*args, **kwargs)
@@ -172,7 +191,7 @@ class EditTaskForm(TaskForm):
         if is_pickup or open_chore is None:
             del self.fields['start_date']
         if is_pickup:
-            for name in ('repeat', 'every_days', 'weekdays', 'every_weeks'):
+            for name in ('repeat', 'every_days', 'weekdays', 'every_weeks', 'season', 'season_start', 'season_end'):
                 del self.fields[name]
 
     def update_fields(self):
@@ -182,7 +201,8 @@ class EditTaskForm(TaskForm):
             'title': c['title'], 'area': c['area'], 'done_when': c['done_when'],
             'estimated_minutes': c['estimated_minutes'], 'assignee': c['assignee'],
             'every_days': c.get('every_days'), 'weekdays': c.get('weekdays', ''),
-            'every_weeks': c.get('every_weeks', 1), 'due_date': c.get('start_date'),
+            'every_weeks': c.get('every_weeks', 1), 'season_start': c.get('season_start'),
+            'season_end': c.get('season_end'), 'due_date': c.get('start_date'),
         }
 
 

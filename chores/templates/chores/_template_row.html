@@ -3,6 +3,7 @@
     <div>{{ template.title }}</div>
     <div class="row-subtitle">
       {% if template.is_pickup %}Follows the pickup schedule{% else %}{{ template.repeat_label }}{% endif %}
+      {% if template.is_seasonal %}· {{ template.season_label }}{% if template.active and template.out_of_season_now %} (back in {{ template.season_start_name }}){% endif %}{% endif %}
       · ~{{ template.estimated_minutes }} min{% if template.default_assignee %} · {{ template.default_assignee.get_username }}{% endif %}
     </div>
   </a>
