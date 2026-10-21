@@ -27,6 +27,15 @@ The goal is to generate SMART (Specific, Measurable, Assignable, Realistic, Time
   - **projected repeats**, outlined: future occurrences worked out from each chore's repeat rule
 
   Projections assume each chore is done on time and don't slide onto lighter days, so a repeat may land a day or so later than shown. Pickup projections follow the pickup schedule. Everyone/Mine works here too, and on a phone the month turns into a list of only the days that have chores.
+- **Stats.** ☰ → Stats shows the last 4 weeks, 12 weeks or year (52 weeks):
+  - **Done on time:** the share of chores due in that time that were done by their due date.
+  - **Streak:** days in a row that ended with nothing overdue, and the best run. Today counts once it's over; away days neither count nor break it.
+  - **Minutes a week:** the estimated minutes of chores done, on average and as a chart per week, split by person.
+  - **How chores ended:** done on time, late, skipped, or still overdue.
+  - **By person:** chores done, minutes and on-time share, credited to whoever ticked the chore.
+  - **By chore:** done out of due, on-time share, average days late and how many times in a row it was done on time, worst first.
+
+  It's all worked out from the chore history. Chores count by their final due date (after any Move To). Open chores dropped when a chore is turned off, its season ends or the pickup schedule changes aren't kept, so they don't appear.
 - **Custom tasks.** ☰ → New Task… adds your own chore. It has:
   - title, area and what "done" looks like
   - estimated minutes

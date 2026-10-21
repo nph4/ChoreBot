@@ -22,6 +22,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - `save_pickup_schedules()` replaces the whole setup and deletes open chores so they regenerate.
   - A removed bin keeps its schedule row, but its template is deactivated so re-adding the bin reuses it. Treat "configured bins" as schedules whose template is active (`active_pickup_schedules()`).
 
+## Stats (`chores/stats.py`)
+
+- Nothing is stored: every figure is computed from `Chore` rows for start..today. `outcome()` is the one place that classifies a chore (on time means its local completion date ≤ `due_date`); an open chore due today is `None` and left out until tomorrow.
+- `household_streak()` marks each day a chore was open past its due date at day's end (`due_date` ≤ day < local completion date). Days before the earliest due date don't count, so a fresh install doesn't show a long streak.
+- Ranges are whole weeks (`STATS_RANGES` in `views.py`) because `weekly_minutes()` buckets 7-day blocks ending today. Bar heights and widths are inline percentages, formatted with `stringformat` so localisation can't put a comma in the CSS.
+
 ## Notifications (`chores/notifications.py`)
 
 - `send_due_notification()` claims the (kind, date) `NotificationLog` row before sending, and keeps it even if nothing was due or a destination failed. That's what prevents duplicates and retry storms, so don't add retries without per-destination tracking.

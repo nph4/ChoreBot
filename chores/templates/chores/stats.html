@@ -1,0 +1,115 @@
+{% extends "chores/base.html" %}
+
+{% block title %}Stats · ChoreBot{% endblock %}
+{% block headerbar_title %}Stats{% endblock %}
+
+{% block content %}
+  <nav class="switcher" aria-label="Time range">
+    <div class="linked">
+      {% for key, label in ranges %}
+        <a class="button toggle{% if key == range %} current{% endif %}" href="?range={{ key }}"{% if key == range %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </div>
+  </nav>
+  <p class="dim caption stats-range">{{ start|date:"j M Y" }} – today</p>
+
+  <section class="stat-tiles" aria-label="Summary">
+    <div class="stat-tile">
+      <div class="stat-number">{% if outcomes.on_time_pct is None %}–{% else %}{{ outcomes.on_time_pct }}%{% endif %}</div>
+      <div class="dim caption">Done on time</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-number">{{ streak }} day{{ streak|pluralize }}</div>
+      <div class="dim caption">Nothing overdue</div>
+      <div class="dim caption">Best {{ best_streak }}</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-number">{{ minutes_per_week }} min</div>
+      <div class="dim caption">Done a week</div>
+    </div>
+  </section>
+
+  <section class="group">
+    <h2 class="heading">How Chores Ended</h2>
+    <ul class="boxed-list">
+      {% if outcomes.total %}
+        <li class="row stats-row">
+          <div class="outcome-bar" role="img"
+               aria-label="{{ outcomes.on_time }} on time, {{ outcomes.late }} late, {{ outcomes.skipped }} skipped, {{ outcomes.overdue }} overdue">
+            <span class="on-time" style="width: {{ outcomes.widths.on_time|stringformat:".1f" }}%"></span><span class="late" style="width: {{ outcomes.widths.late|stringformat:".1f" }}%"></span><span class="skipped" style="width: {{ outcomes.widths.skipped|stringformat:".1f" }}%"></span><span class="overdue" style="width: {{ outcomes.widths.overdue|stringformat:".1f" }}%"></span>
+          </div>
+          <ul class="legend" aria-hidden="true">
+            <li><span class="swatch on-time"></span>On time {{ outcomes.on_time }}</li>
+            <li><span class="swatch late"></span>Late {{ outcomes.late }}</li>
+            <li><span class="swatch skipped"></span>Skipped {{ outcomes.skipped }}</li>
+            <li><span class="swatch overdue"></span>Overdue {{ outcomes.overdue }}</li>
+          </ul>
+        </li>
+      {% else %}
+        <li class="row placeholder">No chores were due in this time</li>
+      {% endif %}
+    </ul>
+  </section>
+
+  <section class="group">
+    <h2 class="heading">Minutes per Week</h2>
+    <ul class="boxed-list">
+      <li class="row stats-row">
+        <div class="week-bars">
+          {% for week in weeks %}
+            <div class="week-bar" role="img" title="{{ week.start|date:"j M" }}–{{ week.end|date:"j M" }}: {{ week.minutes }} min"
+                 aria-label="Week of {{ week.start|date:"j F" }}: {{ week.minutes }} minutes{% for name, minutes, color, height in week.segments %}, {{ name }} {{ minutes }}{% endfor %}">
+              {% for name, minutes, color, height in week.segments %}<span style="height: {{ height|stringformat:".1f" }}%; background: {{ color }}"></span>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <div class="week-axis dim caption" aria-hidden="true">
+          <span>{{ weeks.0.start|date:"j M" }}</span><span>This week</span>
+        </div>
+        {% if legend %}
+          <ul class="legend" aria-hidden="true">
+            {% for name, color in legend %}<li><span class="swatch" style="background: {{ color }}"></span>{{ name }}</li>{% endfor %}
+          </ul>
+        {% else %}
+          <div class="dim caption">Nothing done in this time yet.</div>
+        {% endif %}
+      </li>
+    </ul>
+  </section>
+
+  <section class="group">
+    <h2 class="heading">By Person</h2>
+    <ul class="boxed-list">
+      {% for person in people %}
+        <li class="row">
+          <div class="row-content">
+            <div>{{ person.name }}</div>
+            <div class="row-subtitle">{{ person.done }} done · {{ person.on_time_pct }}% on time</div>
+          </div>
+          <span class="dim">{{ person.minutes }} min</span>
+        </li>
+      {% empty %}
+        <li class="row placeholder">Nothing done in this time yet</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="group">
+    <h2 class="heading">By Chore</h2>
+    <ul class="boxed-list">
+      {% for row in chores %}
+        <li class="row">
+          <div class="row-content">
+            <div>{{ row.template.title }}</div>
+            <div class="row-subtitle">
+              {{ row.done }} of {{ row.due }} done · {{ row.on_time_pct }}% on time{% if row.avg_late %} · {{ row.avg_late }} days late on average{% endif %}
+            </div>
+          </div>
+          <span class="dim" title="Done on time this many times in a row">{{ row.streak }} in a row</span>
+        </li>
+      {% empty %}
+        <li class="row placeholder">No chores were due in this time</li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endblock %}

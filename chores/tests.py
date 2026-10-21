@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import AwayPeriod, Chore, ChoreTemplate, NotificationLog, PickupSchedule
+from . import stats
 from .notifications import send, send_due_notification
 from .services import (
     add_away_period, calendar_entries, complete_chore, enable_template, generate_due_chores, next_due_date,
@@ -1271,3 +1272,100 @@ class SpreadTheLoadTests(TestCase):
         response = self.client.post(reverse('chores:spread'), {'budget': 60}, HTTP_HX_REQUEST='true')
         self.assertContains(response, 'Spread 1 chore over 1 day')
         self.assertEqual(self.client.post(reverse('chores:spread'), {'budget': 0}).status_code, 400)
+
+
+class StatsTests(TestCase):
+    today = date(2027, 6, 30)
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('alex', password='pw')
+        self.sam = get_user_model().objects.create_user('sam', password='pw')
+        self.client.force_login(self.user)
+        self.template = make_template(title='Dishes', estimated_minutes=20)
+        self.start = self.today - timedelta(days=27)
+
+    def chore(self, due, done=None, by=None, skipped=False, template=None):
+        completed_at = timezone.make_aware(datetime(done.year, done.month, done.day, 12)) if done else None
+        return Chore.objects.create(template=template or self.template, due_date=due, completed_at=completed_at,
+                                    completed_by=by, skipped=skipped)
+
+    def test_outcomes(self):
+        d = date(2027, 6, 20)
+        self.chore(d, done=d)
+        self.chore(d - timedelta(days=1), done=d, template=make_template(title='Late'))
+        self.chore(d - timedelta(days=2), done=d, skipped=True, template=make_template(title='Skipped'))
+        self.chore(d, template=make_template(title='Overdue'))
+        self.chore(self.today, template=make_template(title='Due today'))  # not counted yet
+        self.chore(self.start - timedelta(days=1), done=d, template=make_template(title='Before'))
+        counts = stats.outcome_counts(self.start, self.today)
+        self.assertEqual({k: counts[k] for k in ('on_time', 'late', 'skipped', 'overdue', 'total')},
+                         {'on_time': 1, 'late': 1, 'skipped': 1, 'overdue': 1, 'total': 4})
+        self.assertEqual(counts['on_time_pct'], 25)
+
+    def test_household_streak(self):
+        self.chore(self.start - timedelta(days=30), done=self.start - timedelta(days=30), template=make_template(title='First'))
+        # Overdue at the end of 20 and 21 June, done on the 22nd.
+        self.chore(date(2027, 6, 20), done=date(2027, 6, 22))
+        self.chore(self.today, template=make_template(title='Due today'))  # today doesn't count yet
+        current, best = stats.household_streak(self.start, self.today)
+        self.assertEqual(current, 8)  # 22–29 June
+        self.assertEqual(best, 17)  # 3–19 June (the range starts on the 3rd)
+
+    def test_away_days_neither_count_nor_break_streak(self):
+        self.chore(self.start - timedelta(days=30), done=self.start - timedelta(days=30), template=make_template(title='First'))
+        self.chore(date(2027, 6, 20), done=date(2027, 6, 22))
+        AwayPeriod.objects.create(start=date(2027, 6, 25), end=date(2027, 6, 26))
+        self.assertEqual(stats.household_streak(self.start, self.today)[0], 6)
+        self.chore(date(2027, 6, 25), done=date(2027, 6, 27), template=make_template(title='While away'))
+        self.assertEqual(stats.household_streak(self.start, self.today)[0], 3)  # 27–29 June
+
+    def test_streak_starts_with_the_first_chore(self):
+        self.chore(date(2027, 6, 25), done=date(2027, 6, 25))
+        self.assertEqual(stats.household_streak(self.start, self.today), (5, 5))  # 25–29 June
+        Chore.objects.all().delete()
+        self.assertEqual(stats.household_streak(self.start, self.today), (0, 0))
+
+    def test_open_overdue_chore_breaks_streak(self):
+        self.chore(date(2027, 6, 28))
+        self.assertEqual(stats.household_streak(self.start, self.today)[0], 0)
+
+    def test_weekly_minutes_by_person(self):
+        self.chore(self.today, done=self.today, by=self.user)
+        self.chore(self.start, done=self.start, by=self.sam, template=make_template(title='Old', estimated_minutes=5))
+        self.chore(self.today, done=self.today, by=self.sam, skipped=True, template=make_template(title='Skip'))
+        weeks = stats.weekly_minutes(self.start, self.today)
+        self.assertEqual(len(weeks), 4)
+        self.assertEqual((weeks[0].start, weeks[-1].end), (self.start, self.today))
+        self.assertEqual([w.minutes for w in weeks], [5, 0, 0, 20])
+        self.assertEqual(weeks[-1].by_person, {'alex': 20})
+
+    def test_credit_goes_to_whoever_ticked_it(self):
+        chore = self.chore(date(2027, 6, 20), done=date(2027, 6, 21), by=self.sam)
+        chore.assignee = self.user
+        chore.save()
+        [row] = stats.by_person(self.start, self.today)
+        self.assertEqual((row['name'], row['done'], row['minutes'], row['on_time_pct']), ('sam', 1, 20, 0))
+
+    def test_by_chore_streak_and_days_late(self):
+        self.chore(date(2027, 6, 5), done=date(2027, 6, 8))
+        for day in (10, 15, 20):
+            self.chore(date(2027, 6, day), done=date(2027, 6, day))
+        on_time = make_template(title='Always on time')
+        self.chore(date(2027, 6, 20), done=date(2027, 6, 19), template=on_time)
+        dishes, good = stats.by_chore(self.start, self.today)
+        self.assertEqual(dishes['template'], self.template)
+        self.assertEqual((dishes['due'], dishes['done'], dishes['on_time_pct'], dishes['streak'], dishes['avg_late']),
+                         (4, 4, 75, 3, 0.8))
+        self.assertEqual((good['template'], good['streak'], good['avg_late']), (on_time, 1, 0.0))
+
+    def test_page_renders_each_range(self):
+        today = timezone.localdate()
+        self.chore(today - timedelta(days=2), done=today - timedelta(days=1), by=self.user)
+        for key in ('4w', '12w', 'year', 'bogus'):
+            response = self.client.get(reverse('chores:stats'), {'range': key})
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, 'Minutes per Week')
+        self.assertEqual(len(response.context['weeks']), 4)  # unknown range falls back to 4 weeks
+        response = self.client.get(reverse('chores:stats'), {'range': 'year'})
+        self.assertEqual(len(response.context['weeks']), 52)
+        self.assertContains(response, '1 of 1 done · 0% on time')

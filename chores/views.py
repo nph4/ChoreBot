@@ -19,6 +19,7 @@ from django.views.decorators.http import require_POST
 from .forms import (
     AssignForm, AwayForm, EditTaskForm, MoveForm, NewUserForm, PickupSetupForm, ScheduleForm, SpreadForm, TaskForm,
 )
+from . import stats
 from .models import AwayPeriod, Chore, ChoreTemplate, PickupSchedule
 from .services import (
     active_pickup_schedules, add_away_period, assign_chore, calendar_entries, complete_chore, create_task,
@@ -27,6 +28,7 @@ from .services import (
 )
 
 UPCOMING_DAYS = 7
+STATS_RANGES = {'4w': ('4 Weeks', 28), '12w': ('12 Weeks', 84), 'year': ('Year', 364)}  # whole weeks
 HAVE_MINUTES = [15, 30, 60]
 
 
@@ -297,6 +299,20 @@ def _parse_month(value, today):
         return date(year, month, 1)
     except (AttributeError, ValueError):
         return today.replace(day=1)
+
+
+@login_required
+def stats_view(request):
+    """Completion rate, streaks and minutes, over the chosen range ending today."""
+    key = request.GET.get('range') if request.GET.get('range') in STATS_RANGES else '4w'
+    today = timezone.localdate()
+    start = today - timedelta(days=STATS_RANGES[key][1] - 1)
+    return render(request, 'chores/stats.html', {
+        **stats.build(start, today),
+        'range': key,
+        'ranges': [(k, label) for k, (label, _) in STATS_RANGES.items()],
+        'start': start,
+    })
 
 
 @login_required
