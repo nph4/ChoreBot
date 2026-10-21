@@ -47,6 +47,7 @@
       --button-hover: color-mix(in srgb, var(--fg) 15%, transparent);
       --button-checked: color-mix(in srgb, var(--fg) 25%, transparent);
       --focus: color-mix(in srgb, var(--accent) 60%, transparent);
+      --separator: color-mix(in srgb, var(--fg) 8%, transparent);
     }
 
     * { box-sizing: border-box; }
@@ -104,7 +105,7 @@
     .linked > .toggle { border-radius: 0; }
     .linked > .toggle:first-child { border-radius: 6px 0 0 6px; }
     .linked > .toggle:last-child { border-radius: 0 6px 6px 0; }
-    .linked > .toggle + .toggle { box-shadow: inset 1px 0 color-mix(in srgb, var(--fg) 8%, transparent); }
+    .linked > .toggle + .toggle { box-shadow: inset 1px 0 var(--separator); }
     .toggle { font-weight: 400; }
     .toggle.current, .toggle:has(input:checked) { background: var(--button-checked); font-weight: 700; }
     .toggle input { position: absolute; opacity: 0; pointer-events: none; }

@@ -815,6 +815,16 @@ class ChoreListTests(TestCase):
         self.assertContains(response, 'aria-checked="false"')
         self.assertContains(response, f'id="template-{mow.pk}"')
 
+    def test_switching_on_a_finished_one_off_shows_done(self):
+        gate = make_template(title='Fix gate', every_days=None)
+        generate_due_chores()
+        close(gate.chores.get(), days_ago=1)
+        gate.active = False
+        gate.save()
+        response = self.toggle(gate, True, htmx=True)
+        self.assertContains(response, '<span class="dim">Done</span>', html=True)
+        self.assertNotContains(response, 'role="switch"')
+
     def test_pickups_and_finished_one_offs_have_no_switch(self):
         save_pickup_schedules({PickupSchedule.GARBAGE: (1, self.today + timedelta(days=2), False)})
         bins = PickupSchedule.objects.get().template

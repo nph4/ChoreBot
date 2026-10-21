@@ -7,6 +7,17 @@
   #task-form .boxed-list:not(:has(input[name="repeat"][value="custom"]:checked)) .field-every_days,
   #task-form .boxed-list:not(:has(input[name="repeat"][value="weekdays"]:checked)) :is(.field-weekdays, .field-every_weeks) { display: none; }
   #task-form .boxed-list:not(:has(input[name="season"][value="seasonal"]:checked)) :is(.field-season_start, .field-season_end) { display: none; }
+  /* Six Repeat choices don't fit one line on a phone: lay them out 3 by 2, rounded only on the outside corners. */
+  @media (max-width: 500px) {
+    #task-form .field-repeat .suffix { width: 100%; }
+    #task-form .field-repeat .linked { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; }
+    #task-form .field-repeat .linked > .toggle { border-radius: 0; }
+    #task-form .field-repeat .linked > .toggle:nth-child(1) { border-radius: 6px 0 0 0; }
+    #task-form .field-repeat .linked > .toggle:nth-child(3) { border-radius: 0 6px 0 0; }
+    #task-form .field-repeat .linked > .toggle:nth-child(4) { border-radius: 0 0 0 6px; box-shadow: inset 0 1px var(--separator); }
+    #task-form .field-repeat .linked > .toggle:nth-child(6) { border-radius: 0 0 6px 0; }
+    #task-form .field-repeat .linked > .toggle:nth-child(n+5) { box-shadow: inset 1px 0 var(--separator), inset 0 1px var(--separator); }
+  }
 {% endblock %}
 
 {% block content %}

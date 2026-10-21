@@ -159,13 +159,18 @@ def spread(request):
     return _lists_response(request, notice=notice)
 
 
-def _template_rows():
-    """Every chore template, annotated for the Chores page: is_pickup, has_open, finished (done one-off)."""
-    templates = ChoreTemplate.objects.select_related('default_assignee').annotate(
+def _template_rows(**filters):
+    """Chore templates (all, or those matching filters), annotated for the Chores page.
+
+    Each gets is_pickup, has_open and finished (a done one-off). Returns a list: re-querying it
+    (e.g. .get()) would lose `finished`, which is set here rather than annotated.
+    """
+    templates = ChoreTemplate.objects.filter(**filters).select_related('default_assignee').annotate(
         is_pickup=Exists(PickupSchedule.objects.filter(template=OuterRef('pk'))),
         has_open=Exists(Chore.objects.filter(template=OuterRef('pk'), completed_at__isnull=True)),
         has_closed=Exists(Chore.objects.filter(template=OuterRef('pk'), completed_at__isnull=False)),
     )
+    templates = list(templates)
     for template in templates:
         template.finished = template.is_one_off and template.active and template.has_closed and not template.has_open
     return templates
@@ -191,7 +196,7 @@ def set_active(request, pk):
     else:
         remove_template(template)
     if request.headers.get('HX-Request'):
-        return render(request, 'chores/_template_row.html', {'template': _template_rows().get(pk=pk)})
+        return render(request, 'chores/_template_row.html', {'template': _template_rows(pk=pk)[0]})
     return redirect('chores:chore_list')
 
 
